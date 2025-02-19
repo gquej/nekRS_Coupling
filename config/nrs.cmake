@@ -72,6 +72,7 @@ set(SRC
     src/postProcessing/Qcriterion.cpp
     src/core/registerCvodeKernels.cpp
     src/solvers/cvode/cvode.cpp
+    src/coupling/coupling.cpp
     ${BENCH_SOURCES}
     ${MESH_SOURCES}
     ${ELLIPTIC_SOURCES}
@@ -112,6 +113,7 @@ target_include_directories(nekrs-lib
   src/pointInterpolation
   src/solvers/cvode
   src/lns
+  src/coupling
   ${BENCH_SOURCE_DIR}
   ${BENCH_SOURCE_DIR}/core
   ${BENCH_SOURCE_DIR}/fdm
