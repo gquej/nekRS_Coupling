@@ -41,8 +41,11 @@
                                       @ restrict const dfloat* neknekU,
                                       @ restrict const dfloat *W,
                                       @ restrict const dfloat *U,
-                                      @ restrict dfloat *UH)
+                                      @ restrict dfloat *UH,
+                                      @ restrict dfloat *coupling_data,
+                                      @ restrict dlong  *mapping)
 {
+  int mapping_counter = 0;
   for (dlong e = 0; e < Nelements; e++; @outer(0)) {
 
     for (int f = 0; f < p_Nfaces; f++) {
@@ -84,7 +87,6 @@
       }
       @barrier();
     }
-
     for (int f = 0; f < p_Nfaces; f++) {
       for (int m = 0; m < p_Nfp; ++m; @inner(0)) {
         struct bcData bc;
@@ -136,11 +138,19 @@
             bc.winterp = neknekU[neknekId + 2 * neknekOffset];
           }
 
-          velocityDirichletConditions(&bc);
+          // velocityDirichletConditions(&bc);
 
-          UH[idM + 0 * offset] = bc.u;
-          UH[idM + 1 * offset] = bc.v;
-          UH[idM + 2 * offset] = bc.w;
+          // UH[idM + 0 * offset] = bc.u;
+          // UH[idM + 1 * offset] = bc.v;
+          // UH[idM + 2 * offset] = bc.w;
+          const int mapping_ID = mapping[mapping_counter];
+          UH[idM + 0 * offset] = coupling_data[3 * mapping_ID ];
+          UH[idM + 1 * offset] = coupling_data[3 * mapping_ID + 1 ];
+          UH[idM + 2 * offset] = coupling_data[3 * mapping_ID + 2 ];
+
+          printf("%d %d %f %f %f \n", idM, mapping_ID,coupling_data[3 * mapping_ID ],coupling_data[3 * mapping_ID+1 ],coupling_data[3 * mapping_ID +2] );
+          mapping_counter ++;
+
         }
       }
       @barrier();

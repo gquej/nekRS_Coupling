@@ -11,10 +11,13 @@
 #include "neknek.hpp"
 #include "cvode.hpp"
 #include "fldFile.hpp"
+#include "coupling/coupling.hpp"
 
 std::vector<std::string> fieldsToSolve(setupAide& options);
 
 struct nrs_t {
+
+  Coupling *coupling;
 
   static constexpr double targetTimeBenchmark {0.2};
 

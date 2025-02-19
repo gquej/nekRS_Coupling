@@ -473,6 +473,106 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
     nrs->o_filterMT = hpfSetup(nrs->meshV, nrs->filterNc);
   }
 
+  //setup the coupling stuff
+  nrs->coupling = new Coupling(2.);
+  Coupling * coupling = nrs->coupling;
+
+  int p_Nfaces = 6;
+  int p_Nfp = 9;
+
+  int boundary_points_counter = 0;
+
+  for (dlong e = 0; e < mesh->Nelements; e++) {
+    printf("Element %d \n", e);
+
+    for (int f = 0; f < p_Nfaces; f++) {
+      const dlong bcType = nrs->EToB[f + p_Nfaces * e];
+      printf("\t Face  %d BC %d \n", f, bcType);
+      if (bcType == 3) {
+        boundary_points_counter += p_Nfp;
+      }
+      
+      for (int m = 0; m < p_Nfp; ++m) {
+        printf("\t \t Node  %d \n", m);
+        const int n = m + f * p_Nfp;
+        const int sk = e * p_Nfp * p_Nfaces + n;
+        const dlong idM = ((mesh->vmapM))[sk];
+      }
+    }
+  }
+  printf("There are %d outer vertices \n", boundary_points_counter);
+
+  double vertices_temp [3* boundary_points_counter];
+  coupling->Allocate_mapping(boundary_points_counter);
+  int * mapping = coupling->Get_Vertices_mapping();
+
+  //filling vertices_temp with all the outer vertices (including the doubles!!)
+
+  double * nek_x = mesh->x;
+  double * nek_y = mesh->y;
+  double * nek_z = mesh->z;
+
+  int count = 0;
+
+
+
+  for (dlong e = 0; e < mesh->Nelements; e++) {
+
+    for (int f = 0; f < p_Nfaces; f++) {
+      const dlong bcType = nrs->EToB[f + p_Nfaces * e];
+      if (bcType == 3) {
+        for (int m = 0; m < p_Nfp; ++m) {
+          const int n = m + f * p_Nfp;
+          const int sk = e * p_Nfp * p_Nfaces + n;
+          const dlong idM = ((mesh->vmapM))[sk];
+          vertices_temp[3*count] = nek_x[idM];
+          vertices_temp[3*count+1] = nek_y[idM];
+          vertices_temp[3*count+2] = nek_z[idM];
+          count ++;
+        }
+      }
+    }
+  }
+  int unique_count = 0;
+  double diff1, diff2, diff3;
+  double tol = 1.e-10;
+  for (int i = 0; i < boundary_points_counter; i++)
+  {
+    int is_unique = 1;
+    for (int j = 0; j < unique_count; j++)
+    {
+      diff1 = fabs(vertices_temp[3*i] - vertices_temp[3*j]);
+      diff2 = fabs(vertices_temp[3*i + 1] - vertices_temp[3*j + 1]);
+      diff3 = fabs(vertices_temp[3*i + 2] - vertices_temp[3*j + 2]);
+      if ((diff1 < tol) && (diff2 < tol) && (diff3 < tol) && (is_unique == 1)) {
+        is_unique = 0;
+        mapping[i] = j;
+      }
+    }
+    if (is_unique == 1) {
+      vertices_temp[3*unique_count] = vertices_temp[3*i];
+      vertices_temp[3*unique_count + 1] = vertices_temp[3*i + 1];
+      vertices_temp[3*unique_count + 2] = vertices_temp[3*i + 2];
+      mapping[i] = unique_count;
+      unique_count ++;
+    }
+  }
+  coupling->Allocate_vertices(vertices_temp, unique_count);
+  for (int i = 0; i < unique_count; i++)
+  {
+    coupling->Get_data()[3*i] = 4.;
+    coupling->Get_data()[3*i+1] = 0.;
+    coupling->Get_data()[3*i+2] = 1.;
+  }
+  occa::memory temp = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data());
+  coupling->Set_o_data(temp);
+
+  occa::memory temp2 = platform->device.malloc(sizeof(int) * boundary_points_counter, coupling ->Get_Vertices_mapping());
+  coupling->Set_o_mapping(temp2);
+
+  coupling->Get_o_data().copyFrom(coupling->Get_data());
+  coupling->Get_o_mapping().copyFrom(coupling->Get_Vertices_mapping());
+
   // build kernels
   std::string kernelName;
   const std::string suffix = "Hex3D";

@@ -74,8 +74,32 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
 
   mesh_t *mesh = nrs->meshV;
 
-  platform->linAlg->fill((1 + nrs->NVfields) * nrs->fieldOffset, TINY, platform->o_mempool.slice0);
+  // int p_Nfaces = 6;
+  // int p_Nfp = 9;
+  
 
+  // platform->linAlg->fill((1 + nrs->NVfields) * nrs->fieldOffset, TINY, platform->o_mempool.slice0);
+
+  // for (dlong e = 0; e < mesh->Nelements; e++) {
+  //   printf("Element %d \n", e);
+
+  //   for (int f = 0; f < p_Nfaces; f++) {
+  //     const dlong bcType = nrs->EToB[f + p_Nfaces * e];
+  //     printf("\t Face  %d BC %d \n", f, bcType);
+      
+  //     for (int m = 0; m < p_Nfp; ++m) {
+  //       printf("\t \t Node  %d \n", m);
+  //       const int n = m + f * p_Nfp;
+  //       const int sk = e * p_Nfp * p_Nfaces + n;
+  //       const dlong idM = ((mesh->vmapM))[sk];
+        
+        
+        
+
+        
+  //     }
+  //   }
+  // }
   for (int sweep = 0; sweep < 2; sweep++) {
     nrs->pressureDirichletBCKernel(mesh->Nelements,
                                    time,
@@ -110,7 +134,9 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
                                    nrs->neknek ? nrs->neknek->o_U : o_NULL,
                                    nrs->o_usrwrk,
                                    o_U,
-                                   platform->o_mempool.slice1);
+                                   platform->o_mempool.slice1,
+                                   nrs->coupling->Get_o_data(),
+                                   nrs->coupling->Get_o_mapping());
 
     if (sweep == 0)
       oogs::startFinish(platform->o_mempool.slice0,
