@@ -585,7 +585,10 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   precice::string_view mesh_name = "Nek-Mesh";
   precice::string_view direct_mesh_name = "Murphy-Mesh";
   precice::string_view data_name = "Murphy_u";
-  coupling->Setup(mesh_name, direct_mesh_name, data_name, bounding_box);
+  precice::string_view data2_name = "Murphy_w";
+  precice::string_view direct_data_name = "Nek_u";
+
+  coupling->Setup(mesh_name, direct_mesh_name, data_name, bounding_box, data2_name, direct_data_name);
   
 
 

@@ -520,6 +520,15 @@ double finishStep()
 
 bool stepConverged() { return nrs->timeStepConverged; }
 
+void couplingRead (double dt) { nrs->coupling->Read(dt); }
+
+void couplingWrite() { nrs->coupling->Write(); }
+
+void couplingAdvance(double dt) { nrs->coupling->Advance(dt); }
+
+void couplingTimeStep(double dt) { nrs->coupling->GetTimeStep(dt); }
+
+
 } // namespace nekrs
 
 int nrsFinalize(nrs_t *nrs)

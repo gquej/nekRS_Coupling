@@ -47,6 +47,10 @@ bool runStep(std::function<bool(int)> convergenceCheck, int corrector);
 bool runStep(int corrector);
 double finishStep();
 bool stepConverged();
+void couplingRead (double dt);
+void couplingWrite();
+void couplingAdvance(double dt);
+double couplingTimeStep(double dt);
 
 }
 

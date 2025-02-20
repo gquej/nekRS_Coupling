@@ -41,6 +41,9 @@ class Coupling {
         string_t data_name_;
         vector_t Data_; //The data to be sent or received
 
+        string_t data2_name_;
+        vector_t Data2_;
+
 
 
         //other mesh (direct ) stuff, and stuff that must be sent to murphy 
@@ -58,7 +61,7 @@ class Coupling {
     public: 
         Coupling() = default;
         explicit Coupling (std::string_view solver_name, std::string_view config_file);
-        void Setup(precice::string_view mesh_name, precice::string_view direct_mesh_name, precice::string_view data_name, double *bounding_box);
+        void Setup(precice::string_view mesh_name, precice::string_view direct_mesh_name, precice::string_view data_name, double *bounding_box, precice::string_view data2_name, precice::string_view direct_data_name);
         void Allocate_mapping(int mapping_size);
         void Allocate_vertices(double * vertices, int size);
         void Set_Vertices_coord(double * vertices) ;
@@ -76,6 +79,7 @@ class Coupling {
         void Write();
         void Advance(double dt) {precice_->advance(dt);};
         void Finalize() {precice_->finalize();};
+        double GetTimeStep(double dt);
         
 
         ~Coupling() {

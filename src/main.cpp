@@ -539,7 +539,12 @@ int main(int argc, char** argv)
 
     if (tStep <= 1000) nekrs::verboseInfo(true); 
 
+    dt = nekrs::couplingTimeStep(dt);
+
     nekrs::initStep(time, dt, tStep);
+
+    //Coupling: reading the murphy velocity and vorticity
+    nekrs::couplingRead(dt);
     
     int corrector = 1;
     bool converged = false;
@@ -548,6 +553,9 @@ int main(int argc, char** argv)
     } while (!converged);
  
     time = nekrs::finishStep();
+
+    nekrs::couplingWrite();
+    nekrs::couplingAdvance(dt);
 
     if(nekrs::updateFileCheckFreq()) {
       if(tStep % nekrs::updateFileCheckFreq()) 
