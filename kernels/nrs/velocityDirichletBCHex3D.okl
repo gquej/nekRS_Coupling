@@ -148,7 +148,7 @@
           UH[idM + 1 * offset] = coupling_data[3 * mapping_ID + 1 ];
           UH[idM + 2 * offset] = coupling_data[3 * mapping_ID + 2 ];
 
-          printf("%d %d %f %f %f \n", idM, mapping_ID,coupling_data[3 * mapping_ID ],coupling_data[3 * mapping_ID+1 ],coupling_data[3 * mapping_ID +2] );
+          //printf("%d %d %f %f %f \n", idM, mapping_ID,coupling_data[3 * mapping_ID ],coupling_data[3 * mapping_ID+1 ],coupling_data[3 * mapping_ID +2] );
           mapping_counter ++;
 
         }

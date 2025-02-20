@@ -474,7 +474,9 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   }
 
   //setup the coupling stuff
-  nrs->coupling = new Coupling(2.);
+  std::string_view solver_name = "Nek";
+  std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
+  nrs->coupling = new Coupling(solver_name, config_file);
   Coupling * coupling = nrs->coupling;
 
   int p_Nfaces = 6;
@@ -483,24 +485,24 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   int boundary_points_counter = 0;
 
   for (dlong e = 0; e < mesh->Nelements; e++) {
-    printf("Element %d \n", e);
+    //printf("Element %d \n", e);
 
     for (int f = 0; f < p_Nfaces; f++) {
       const dlong bcType = nrs->EToB[f + p_Nfaces * e];
-      printf("\t Face  %d BC %d \n", f, bcType);
+      //printf("\t Face  %d BC %d \n", f, bcType);
       if (bcType == 3) {
         boundary_points_counter += p_Nfp;
       }
       
       for (int m = 0; m < p_Nfp; ++m) {
-        printf("\t \t Node  %d \n", m);
+        //printf("\t \t Node  %d \n", m);
         const int n = m + f * p_Nfp;
         const int sk = e * p_Nfp * p_Nfaces + n;
         const dlong idM = ((mesh->vmapM))[sk];
       }
     }
   }
-  printf("There are %d outer vertices \n", boundary_points_counter);
+  //printf("There are %d outer vertices \n", boundary_points_counter);
 
   double vertices_temp [3* boundary_points_counter];
   coupling->Allocate_mapping(boundary_points_counter);
@@ -572,6 +574,20 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
 
   coupling->Get_o_data().copyFrom(coupling->Get_data());
   coupling->Get_o_mapping().copyFrom(coupling->Get_Vertices_mapping());
+
+  double bounding_box[6];
+  bounding_box[0] = 0.;
+  bounding_box[1] = 1.;
+  bounding_box[2] = 0.;
+  bounding_box[3] = 1.;
+  bounding_box[4] = 0.;
+  bounding_box[5] = 1.;
+  precice::string_view mesh_name = "Nek-Mesh";
+  precice::string_view direct_mesh_name = "Murphy-Mesh";
+  precice::string_view data_name = "Murphy_u";
+  coupling->Setup(mesh_name, direct_mesh_name, data_name, bounding_box);
+  
+
 
   // build kernels
   std::string kernelName;

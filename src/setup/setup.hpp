@@ -2,6 +2,7 @@
 #define nekrs_inssetup_hpp_
 
 #include "nrs.hpp"
+#include <precice/precice.hpp>
 
 void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs);
 
