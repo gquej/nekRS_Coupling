@@ -273,6 +273,37 @@ include(config/nek5000.cmake)
 # nrs
 include(config/nrs.cmake)
 
+#preCICE
+
+# # Specify include directory for preCICE
+# include_directories(SYSTEM /soft/precice/include)
+
+# # Link preCICE library
+# link_directories(/soft/precice/lib)
+
+# # Set RPATH for runtime linking
+# set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath,/soft/precice/lib")
+
+# # Link against preCICE
+# #set(PRECICE_LIBS -lprecice)
+
+# # Add libraries to targets
+
+# find_library(PRECICE_LIBRARY NAMES precice PATHS /soft/precice/lib)
+
+# if(NOT PRECICE_LIBRARY)
+#   message(FATAL_ERROR "preCICE library not found in /soft/precice/lib")
+# endif()
+
+# target_link_libraries(nekrs-lib PUBLIC ${PRECICE_LIBRARY})
+set(precice_DIR "/soft/precice/lib/cmake/precice")
+find_package(precice REQUIRED CONFIG)
+
+target_link_libraries(nekrs-lib PUBLIC precice::precice)
+
+target_link_libraries(nekrs-lib PUBLIC /soft/petsc/lib/libpetsc.so)
+
+
 # Link dependencies 
 target_link_libraries(nekrs-lib PUBLIC libocca PRIVATE nekrs-hypre nekrs-hypre-device gs ${GSLIB} blas lapack ${CMAKE_DL_LIBS})
 if(OpenMP_FOUND)

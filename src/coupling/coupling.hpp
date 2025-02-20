@@ -7,6 +7,8 @@
 #include <iostream>
 #include <algorithm> // for std::copy
 #include <occa.hpp>
+
+#include <precice/precice.hpp>
 class Coupling {
     protected:
         double * vertices_coord_;
