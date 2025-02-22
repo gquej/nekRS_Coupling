@@ -300,6 +300,7 @@ set(precice_DIR "/soft/precice/lib/cmake/precice")
 find_package(precice REQUIRED CONFIG)
 
 target_link_libraries(nekrs-lib PUBLIC precice::precice)
+target_include_directories(nekrs-lib PUBLIC /soft/precice/include)
 
 target_link_libraries(nekrs-lib PUBLIC /soft/petsc/lib/libpetsc.so)
 

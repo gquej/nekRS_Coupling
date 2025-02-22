@@ -576,12 +576,12 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   coupling->Get_o_mapping().copyFrom(coupling->Get_Vertices_mapping());
 
   double bounding_box[6];
-  bounding_box[0] = 0.;
-  bounding_box[1] = 1.;
-  bounding_box[2] = 0.;
-  bounding_box[3] = 1.;
-  bounding_box[4] = 0.;
-  bounding_box[5] = 1.;
+  bounding_box[0] = 0.25;
+  bounding_box[1] = 0.75;
+  bounding_box[2] = 0.25;
+  bounding_box[3] = 0.75;
+  bounding_box[4] = 0.25;
+  bounding_box[5] = 0.75;
   precice::string_view mesh_name = "Nek-Mesh";
   precice::string_view direct_mesh_name = "Murphy-Mesh";
   precice::string_view data_name = "Murphy_u";

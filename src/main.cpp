@@ -538,7 +538,6 @@ int main(int argc, char** argv)
     nekrs::outputStep(outputStep);
 
     if (tStep <= 1000) nekrs::verboseInfo(true); 
-
     dt = nekrs::couplingTimeStep(dt);
 
     nekrs::initStep(time, dt, tStep);

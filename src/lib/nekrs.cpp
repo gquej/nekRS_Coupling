@@ -520,7 +520,10 @@ double finishStep()
 
 bool stepConverged() { return nrs->timeStepConverged; }
 
-void couplingRead (double dt) { nrs->coupling->Read(dt); }
+void couplingRead (double dt) {
+  nrs->coupling->Read(dt);
+  nrs->coupling->Get_o_data().copyFrom(nrs->coupling->Get_data());
+}
 
 void couplingWrite() { nrs->coupling->Write(); }
 

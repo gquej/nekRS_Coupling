@@ -70,6 +70,11 @@ void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct
 void Coupling::Read(double dt) {
     precice_->readData(mesh_name_, data_name_, vertex_IDs_, dt, Data_);
     precice_->readData(mesh_name_, data2_name_, vertex_IDs_, dt, Data2_);
+    //copying the received data to the buffer used by the device
+    for (int i = 0; i < 3*mesh_size_; i++)
+    {
+        data_[i] = Data_[i];
+    }
 }
 
 void Coupling::Write() {
@@ -82,5 +87,5 @@ void Coupling::Write() {
 }
 
 double Coupling::GetTimeStep(double dt) {
-    return precice_->getMaxTimeStepSize();
+    return fmin(precice_->getMaxTimeStepSize(), dt);
 }
