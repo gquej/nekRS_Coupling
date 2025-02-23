@@ -68,6 +68,9 @@ class Coupling {
         double * Get_Vertices_coord() {return vertices_coord_;};
         double * Get_data() {return data_;};
         int * Get_Vertices_mapping() {return vertices_mapping_;};
+        vector_t *direct_vertices() {return &direct_vertices_; };
+        int direct_mesh_size() {return direct_mesh_size_;};
+        vector_t *direct_data() {return &direct_data_;};
 
         occa::memory Get_o_data() {return o_data;};
         occa::memory Get_o_mapping() {return o_mapping;};

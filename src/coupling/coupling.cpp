@@ -64,6 +64,7 @@ void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct
     direct_data_.resize(3 * direct_mesh_size_);
     direct_vertex_IDs_.resize(direct_mesh_size_);
     precice_->getMeshVertexIDsAndCoordinates(direct_mesh_name_, direct_vertex_IDs_, direct_vertices_);
+    
 
 }
 
@@ -77,12 +78,7 @@ void Coupling::Read(double dt) {
     }
 }
 
-void Coupling::Write() {
-    for (int i = 0; i < direct_mesh_size_; i++)
-    {
-        direct_data_[i] = 0.;
-    }
-    
+void Coupling::Write() {    
     precice_->writeData(direct_mesh_name_, direct_data_name_, direct_vertex_IDs_, direct_data_);
 }
 

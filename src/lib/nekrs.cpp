@@ -525,7 +525,42 @@ void couplingRead (double dt) {
   nrs->coupling->Get_o_data().copyFrom(nrs->coupling->Get_data());
 }
 
-void couplingWrite() { nrs->coupling->Write(); }
+void couplingWrite() {
+  static pointInterpolation_t *interpolator = new pointInterpolation_t(nrs);
+  static std::vector<dfloat> xp, yp, zp;
+  static occa::memory o_fields1D;
+  //static occa::memory o_work;
+  const auto Nfields = 3;
+  const int np = nrs->coupling->direct_mesh_size();
+  const auto offset = np;
+  const std::vector<dfloat> vertices = *(nrs->coupling->direct_vertices());
+  for (int i = 0; i < np; i++) {
+    xp.push_back(vertices[3*i]);
+    yp.push_back(vertices[3*i+1]);
+    zp.push_back(vertices[3*i+2]);
+  }
+  o_fields1D = platform->device.malloc(Nfields * offset * sizeof(dfloat));
+  interpolator->setPoints(np, xp.data(), yp.data(), zp.data());
+  interpolator->find();
+  const auto fieldOffsetBytes = nrs->fieldOffset * sizeof(dfloat);
+  //you've got to put the desired field (velocity) into o_work
+  interpolator->eval(Nfields, 
+    nrs->fieldOffset, 
+    nrs->o_U, 
+    offset, 
+    o_fields1D);
+  std::vector<dfloat> U_eval(Nfields*np);
+  o_fields1D.copyTo(U_eval.data());
+  std::vector<double> * direct_data = nrs->coupling->direct_data();
+  for (int i = 0; i < np; i++)
+  {
+    (*direct_data)[3*i] = U_eval[i + 0*offset];
+    (*direct_data)[3*i+1] = U_eval[i + 1*offset];
+    (*direct_data)[3*i+2] = U_eval[i + 2*offset];
+  }
+
+  nrs->coupling->Write();
+ }
 
 void couplingAdvance(double dt) { nrs->coupling->Advance(dt); }
 
