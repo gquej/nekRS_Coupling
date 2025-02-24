@@ -136,6 +136,7 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
                                    o_U,
                                    platform->o_mempool.slice1,
                                    nrs->o_coupling_data1,
+                                   nrs->o_coupling_data2,
                                    nrs->o_coupling_mapping);
 
     if (sweep == 0)

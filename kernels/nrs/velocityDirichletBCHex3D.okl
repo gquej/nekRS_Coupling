@@ -42,7 +42,8 @@
                                       @ restrict const dfloat *W,
                                       @ restrict const dfloat *U,
                                       @ restrict dfloat *UH,
-                                      @ restrict dfloat *coupling_data,
+                                      @ restrict dfloat *coupling_data1,
+                                      @ restrict dfloat *coupling_data2,
                                       @ restrict dlong  *mapping)
 {
   int mapping_counter = 0;
@@ -144,11 +145,10 @@
           // UH[idM + 1 * offset] = bc.v;
           // UH[idM + 2 * offset] = bc.w;
           const int mapping_ID = mapping[mapping_counter];
-          UH[idM + 0 * offset] = coupling_data[3 * mapping_ID ];
-          UH[idM + 1 * offset] = coupling_data[3 * mapping_ID + 1 ];
-          UH[idM + 2 * offset] = coupling_data[3 * mapping_ID + 2 ];
-
-          //printf("%d %d %f %f %f \n", idM, mapping_ID,coupling_data[3 * mapping_ID ],coupling_data[3 * mapping_ID+1 ],coupling_data[3 * mapping_ID +2] );
+          UH[idM + 0 * offset] = coupling_data1[3 * mapping_ID ];
+          UH[idM + 1 * offset] = coupling_data1[3 * mapping_ID + 1 ];
+          UH[idM + 2 * offset] = coupling_data1[3 * mapping_ID + 2 ];
+          
           mapping_counter ++;
 
         }

@@ -476,94 +476,6 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   //setup the coupling stuff
   std::string_view solver_name = "Nek";
   std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
-  nrs->coupling = new Coupling(solver_name, config_file);
-  Coupling * coupling = nrs->coupling;
-
-  int p_Nfaces = 6;
-  int p_Nfp = 9;
-
-  int boundary_points_counter = 0;
-
-  for (dlong e = 0; e < mesh->Nelements; e++) {
-    //printf("Element %d \n", e);
-
-    for (int f = 0; f < p_Nfaces; f++) {
-      const dlong bcType = nrs->EToB[f + p_Nfaces * e];
-      //printf("\t Face  %d BC %d \n", f, bcType);
-      if (bcType == 3) {
-        boundary_points_counter += p_Nfp;
-      }
-      
-      for (int m = 0; m < p_Nfp; ++m) {
-        //printf("\t \t Node  %d \n", m);
-        const int n = m + f * p_Nfp;
-        const int sk = e * p_Nfp * p_Nfaces + n;
-        const dlong idM = ((mesh->vmapM))[sk];
-      }
-    }
-  }
-
-  double vertices_temp [3* boundary_points_counter];
-  coupling->Resize_mapping(boundary_points_counter);
-  std::vector<int> * mapping = coupling->mapping();
-
-  //filling vertices_temp with all the outer vertices (including the doubles!!)
-
-  double * nek_x = mesh->x;
-  double * nek_y = mesh->y;
-  double * nek_z = mesh->z;
-
-  int count = 0;
-
-  for (dlong e = 0; e < mesh->Nelements; e++) {
-    for (int f = 0; f < p_Nfaces; f++) {
-      const dlong bcType = nrs->EToB[f + p_Nfaces * e];
-      if (bcType == 3) {
-        for (int m = 0; m < p_Nfp; ++m) {
-          const int n = m + f * p_Nfp;
-          const int sk = e * p_Nfp * p_Nfaces + n;
-          const dlong idM = ((mesh->vmapM))[sk];
-          vertices_temp[3*count] = nek_x[idM];
-          vertices_temp[3*count+1] = nek_y[idM];
-          vertices_temp[3*count+2] = nek_z[idM];
-          count ++;
-        }
-      }
-    }
-  }
-  int unique_count = 0;
-  double diff1, diff2, diff3;
-  double tol = 1.e-10;
-  for (int i = 0; i < boundary_points_counter; i++)
-  {
-    int is_unique = 1;
-    for (int j = 0; j < unique_count; j++)
-    {
-      diff1 = fabs(vertices_temp[3*i] - vertices_temp[3*j]);
-      diff2 = fabs(vertices_temp[3*i + 1] - vertices_temp[3*j + 1]);
-      diff3 = fabs(vertices_temp[3*i + 2] - vertices_temp[3*j + 2]);
-      if ((diff1 < tol) && (diff2 < tol) && (diff3 < tol) && (is_unique == 1)) {
-        is_unique = 0;
-        (*mapping)[i] = j;
-      }
-    }
-    if (is_unique == 1) {
-      vertices_temp[3*unique_count] = vertices_temp[3*i];
-      vertices_temp[3*unique_count + 1] = vertices_temp[3*i + 1];
-      vertices_temp[3*unique_count + 2] = vertices_temp[3*i + 2];
-      (*mapping)[i] = unique_count;
-      unique_count ++;
-    }
-  }
-  coupling->Set_vertices(vertices_temp, unique_count);
-
-  nrs->o_coupling_data1 = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data1());
-  nrs->o_coupling_data2 = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data2());
-  nrs->o_coupling_mapping = platform->device.malloc(sizeof(int) * boundary_points_counter, coupling ->Get_mapping());
-
-  nrs->o_coupling_data1.copyFrom(coupling->Get_data1());
-  nrs->o_coupling_data2.copyFrom(coupling->Get_data2());
-  nrs->o_coupling_mapping.copyFrom(coupling->Get_mapping());
 
   double bounding_box[6];
   bounding_box[0] = 0.25;
@@ -577,6 +489,88 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   precice::string_view data_name = "Murphy_u";
   precice::string_view data2_name = "Murphy_w";
   precice::string_view direct_data_name = "Nek_u";
+
+  nrs->coupling = new Coupling(solver_name, config_file);
+  Coupling * coupling = nrs->coupling;
+
+  int p_Nfaces = mesh->Nfaces;
+  int p_Nfp = mesh->Nfp;
+  int N_elements = mesh->Nelements;
+  int boundary_points_counter = 0;
+
+  //first loop to count the total number of vertices on the outer nek boundary (this includes doubles)
+  for (dlong e = 0; e < N_elements; e++) {
+    for (int f = 0; f < p_Nfaces; f++) {
+      const dlong bcType = nrs->EToB[f + p_Nfaces * e];
+      if (bcType == 3) {
+        boundary_points_counter += p_Nfp;
+      }
+    }
+  }
+
+  double vertices_temp [3* boundary_points_counter]; //temp array to store all the outer vertices
+  coupling->Resize_mapping(boundary_points_counter); //total number of nek outer vertices (as seen by nek)
+  std::vector<int> * mapping = coupling->mapping(); //mapping from the nek mesh to the precice buffer
+
+  //filling vertices_temp with all the outer vertices (including the doubles!!)
+  double * nek_x = mesh->x;
+  double * nek_y = mesh->y;
+  double * nek_z = mesh->z;
+
+  int total_count = 0;
+
+  for (dlong e = 0; e < N_elements; e++) {
+    for (int f = 0; f < p_Nfaces; f++) {
+      const dlong bcType = nrs->EToB[f + p_Nfaces * e];
+      if (bcType == 3) {
+        for (int m = 0; m < p_Nfp; ++m) {
+          const int n = m + f * p_Nfp;
+          const int sk = e * p_Nfp * p_Nfaces + n;
+          const dlong idM = ((mesh->vmapM))[sk];
+          vertices_temp[3 * total_count+ 0]  = nek_x[idM];
+          vertices_temp[3 * total_count + 1] = nek_y[idM];
+          vertices_temp[3 * total_count + 2] = nek_z[idM];
+          total_count ++;
+        }
+      }
+    }
+  }
+
+  //filtering all the nek vertices that are duplicated across this rank (and only this rank)
+  int unique_count = 0;
+  double diff1, diff2, diff3;
+  double tol = 1.e-10;
+  for (int i = 0; i < boundary_points_counter; i++)
+  {
+    int is_unique = 1;
+    for (int j = 0; j < unique_count; j++)
+    {
+      diff1 = fabs(vertices_temp[3 * i + 0] - vertices_temp[3 * j + 0]);
+      diff2 = fabs(vertices_temp[3 * i + 1] - vertices_temp[3 * j + 1]);
+      diff3 = fabs(vertices_temp[3 * i + 2] - vertices_temp[3 * j + 2]);
+      if ((diff1 < tol) && (diff2 < tol) && (diff3 < tol) && (is_unique == 1)) {
+        is_unique = 0;
+        (*mapping)[i] = j;
+      }
+    }
+    if (is_unique == 1) {
+      vertices_temp[3 * unique_count + 0] = vertices_temp[3 * i + 0];
+      vertices_temp[3 * unique_count + 1] = vertices_temp[3 * i + 1];
+      vertices_temp[3 * unique_count + 2] = vertices_temp[3 * i + 2];
+      (*mapping)[i] = unique_count;
+      unique_count ++;
+    }
+  }
+
+  coupling->Set_vertices(vertices_temp, unique_count);
+
+  nrs->o_coupling_data1 = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data1());
+  nrs->o_coupling_data2 = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data2());
+  nrs->o_coupling_mapping = platform->device.malloc(sizeof(int) * boundary_points_counter, coupling ->Get_mapping());
+
+  nrs->o_coupling_data1.copyFrom(coupling->Get_data1());
+  nrs->o_coupling_data2.copyFrom(coupling->Get_data2());
+  nrs->o_coupling_mapping.copyFrom(coupling->Get_mapping());
 
   coupling->Setup(mesh_name, direct_mesh_name, data_name, bounding_box, data2_name, direct_data_name);
   //-----------------------------------------------------------------------------------------------------------------------------------
