@@ -18,6 +18,9 @@ std::vector<std::string> fieldsToSolve(setupAide& options);
 struct nrs_t {
 
   Coupling *coupling;
+  occa::memory o_coupling_data1;
+  occa::memory o_coupling_data2;
+  occa::memory o_coupling_mapping;
 
   static constexpr double targetTimeBenchmark {0.2};
 

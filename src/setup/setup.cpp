@@ -472,7 +472,7 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
 
     nrs->o_filterMT = hpfSetup(nrs->meshV, nrs->filterNc);
   }
-
+  //----------------------------------------------------------------------------------------------------------------------------
   //setup the coupling stuff
   std::string_view solver_name = "Nek";
   std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
@@ -502,11 +502,10 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
       }
     }
   }
-  //printf("There are %d outer vertices \n", boundary_points_counter);
 
   double vertices_temp [3* boundary_points_counter];
-  coupling->Allocate_mapping(boundary_points_counter);
-  int * mapping = coupling->Get_Vertices_mapping();
+  coupling->Resize_mapping(boundary_points_counter);
+  std::vector<int> * mapping = coupling->mapping();
 
   //filling vertices_temp with all the outer vertices (including the doubles!!)
 
@@ -516,10 +515,7 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
 
   int count = 0;
 
-
-
   for (dlong e = 0; e < mesh->Nelements; e++) {
-
     for (int f = 0; f < p_Nfaces; f++) {
       const dlong bcType = nrs->EToB[f + p_Nfaces * e];
       if (bcType == 3) {
@@ -548,32 +544,26 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
       diff3 = fabs(vertices_temp[3*i + 2] - vertices_temp[3*j + 2]);
       if ((diff1 < tol) && (diff2 < tol) && (diff3 < tol) && (is_unique == 1)) {
         is_unique = 0;
-        mapping[i] = j;
+        (*mapping)[i] = j;
       }
     }
     if (is_unique == 1) {
       vertices_temp[3*unique_count] = vertices_temp[3*i];
       vertices_temp[3*unique_count + 1] = vertices_temp[3*i + 1];
       vertices_temp[3*unique_count + 2] = vertices_temp[3*i + 2];
-      mapping[i] = unique_count;
+      (*mapping)[i] = unique_count;
       unique_count ++;
     }
   }
-  coupling->Allocate_vertices(vertices_temp, unique_count);
-  for (int i = 0; i < unique_count; i++)
-  {
-    coupling->Get_data()[3*i] = 4.;
-    coupling->Get_data()[3*i+1] = 0.;
-    coupling->Get_data()[3*i+2] = 1.;
-  }
-  occa::memory temp = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data());
-  coupling->Set_o_data(temp);
+  coupling->Set_vertices(vertices_temp, unique_count);
 
-  occa::memory temp2 = platform->device.malloc(sizeof(int) * boundary_points_counter, coupling ->Get_Vertices_mapping());
-  coupling->Set_o_mapping(temp2);
+  nrs->o_coupling_data1 = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data1());
+  nrs->o_coupling_data2 = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data2());
+  nrs->o_coupling_mapping = platform->device.malloc(sizeof(int) * boundary_points_counter, coupling ->Get_mapping());
 
-  coupling->Get_o_data().copyFrom(coupling->Get_data());
-  coupling->Get_o_mapping().copyFrom(coupling->Get_Vertices_mapping());
+  nrs->o_coupling_data1.copyFrom(coupling->Get_data1());
+  nrs->o_coupling_data2.copyFrom(coupling->Get_data2());
+  nrs->o_coupling_mapping.copyFrom(coupling->Get_mapping());
 
   double bounding_box[6];
   bounding_box[0] = 0.25;
@@ -589,7 +579,7 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   precice::string_view direct_data_name = "Nek_u";
 
   coupling->Setup(mesh_name, direct_mesh_name, data_name, bounding_box, data2_name, direct_data_name);
-  
+  //-----------------------------------------------------------------------------------------------------------------------------------
 
 
   // build kernels

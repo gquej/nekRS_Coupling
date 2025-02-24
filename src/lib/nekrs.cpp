@@ -522,7 +522,7 @@ bool stepConverged() { return nrs->timeStepConverged; }
 
 void couplingRead (double dt) {
   nrs->coupling->Read(dt);
-  nrs->coupling->Get_o_data().copyFrom(nrs->coupling->Get_data());
+  nrs->o_coupling_data1.copyFrom(nrs->coupling->Get_data1());
 }
 
 void couplingWrite() {
