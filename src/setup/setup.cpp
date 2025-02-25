@@ -652,6 +652,9 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
     kernelName = "velocityDirichletBC" + suffix;
     nrs->velocityDirichletBCKernel = platform->kernels.get(section + kernelName);
 
+    kernelName = "velocityMixedBC" + suffix;
+    nrs->velocityMixedBCKernel = platform->kernels.get(section + kernelName);
+
     kernelName = "velocityNeumannBC" + suffix;
     nrs->velocityNeumannBCKernel = platform->kernels.get(section + kernelName);
 

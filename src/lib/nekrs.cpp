@@ -540,7 +540,7 @@ void couplingWrite() {
     zp.push_back((*vertices)[3 * i + 2]);
   }
 
-  static occa::memory = platform->device.malloc(Nfields * offset * sizeof(dfloat));
+  static occa::memory o_fields1D = platform->device.malloc(Nfields * offset * sizeof(dfloat));
   interpolator->setPoints(np, xp.data(), yp.data(), zp.data());
   interpolator->find();
   const auto fieldOffsetBytes = nrs->fieldOffset * sizeof(dfloat);

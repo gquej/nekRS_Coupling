@@ -117,7 +117,7 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
                                    o_Ue,
                                    platform->o_mempool.slice0);
 
-    nrs->velocityDirichletBCKernel(mesh->Nelements,
+    nrs->velocityMixedBCKernel(mesh->Nelements,
                                    nrs->fieldOffset,
                                    time,
                                    mesh->o_sgeo,

@@ -167,6 +167,7 @@ struct nrs_t {
   occa::kernel velocityRhsKernel;
   occa::kernel velocityNeumannBCKernel;
   occa::kernel velocityDirichletBCKernel;
+  occa::kernel velocityMixedBCKernel;
 
   occa::kernel cflKernel;
 

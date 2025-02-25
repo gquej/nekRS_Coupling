@@ -139,17 +139,11 @@
             bc.winterp = neknekU[neknekId + 2 * neknekOffset];
           }
 
-          // velocityDirichletConditions(&bc);
+          velocityDirichletConditions(&bc);
 
-          // UH[idM + 0 * offset] = bc.u;
-          // UH[idM + 1 * offset] = bc.v;
-          // UH[idM + 2 * offset] = bc.w;
-          const int mapping_ID = mapping[mapping_counter];
-          UH[idM + 0 * offset] = coupling_data1[3 * mapping_ID ];
-          UH[idM + 1 * offset] = coupling_data1[3 * mapping_ID + 1 ];
-          UH[idM + 2 * offset] = coupling_data1[3 * mapping_ID + 2 ];
-          
-          mapping_counter ++;
+          UH[idM + 0 * offset] = bc.u;
+          UH[idM + 1 * offset] = bc.v;
+          UH[idM + 2 * offset] = bc.w;
 
         }
       }
