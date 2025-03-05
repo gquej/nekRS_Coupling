@@ -21,6 +21,8 @@ struct nrs_t {
   occa::memory o_coupling_data1;
   occa::memory o_coupling_data2;
   occa::memory o_coupling_mapping;
+  dlong *coupling_vmap;
+  occa::memory o_coupling_vmap;
 
   static constexpr double targetTimeBenchmark {0.2};
 

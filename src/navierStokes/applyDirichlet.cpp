@@ -137,7 +137,11 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
                                    platform->o_mempool.slice1,
                                    nrs->o_coupling_data1,
                                    nrs->o_coupling_data2,
-                                   nrs->o_coupling_mapping);
+                                   nrs->o_coupling_mapping, 
+                                   mesh->o_vgeo,
+                                   mesh->o_D, 
+                                   o_Ue, 
+                                   nrs->o_coupling_vmap);
 
     if (sweep == 0)
       oogs::startFinish(platform->o_mempool.slice0,

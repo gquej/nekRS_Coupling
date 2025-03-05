@@ -498,6 +498,12 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   int N_elements = mesh->Nelements;
   int boundary_points_counter = 0;
 
+  nrs->coupling_vmap = (dlong *)calloc(mesh->Nelements * mesh->Np, sizeof(dlong)); //mapping from volumic indices to precice buffer (i.e., a lot of these are empty since a lot of nodes are not at a boundary)
+  for (int i = 0; i < mesh->Nelements * mesh->Np; i++)
+  {
+    nrs->coupling_vmap[i] = -1; //default: no mapping
+  }
+  
   //first loop to count the total number of vertices on the outer nek boundary (this includes doubles)
   for (dlong e = 0; e < N_elements; e++) {
     for (int f = 0; f < p_Nfaces; f++) {
@@ -510,7 +516,10 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
 
   double vertices_temp [3* boundary_points_counter]; //temp array to store all the outer vertices
   coupling->Resize_mapping(boundary_points_counter); //total number of nek outer vertices (as seen by nek)
-  std::vector<int> * mapping = coupling->mapping(); //mapping from the nek mesh to the precice buffer
+  std::vector<int> * mapping = coupling->mapping(); //mapping from the nek mesh to the precice buffe
+  int counter_to_idM[boundary_points_counter];
+  
+  // int temp_mapping[boundary_points_counter];
 
   //filling vertices_temp with all the outer vertices (including the doubles!!)
   double * nek_x = mesh->x;
@@ -527,9 +536,11 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
           const int n = m + f * p_Nfp;
           const int sk = e * p_Nfp * p_Nfaces + n;
           const dlong idM = ((mesh->vmapM))[sk];
+          // temp_mapping[sk] = idM;
           vertices_temp[3 * total_count+ 0]  = nek_x[idM];
           vertices_temp[3 * total_count + 1] = nek_y[idM];
           vertices_temp[3 * total_count + 2] = nek_z[idM];
+          counter_to_idM[total_count] = sk;
           total_count ++;
         }
       }
@@ -542,6 +553,7 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   double tol = 1.e-10;
   for (int i = 0; i < boundary_points_counter; i++)
   {
+    const dlong idM = ((mesh->vmapM))[counter_to_idM[i]];
     int is_unique = 1;
     for (int j = 0; j < unique_count; j++)
     {
@@ -551,6 +563,7 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
       if ((diff1 < tol) && (diff2 < tol) && (diff3 < tol) && (is_unique == 1)) {
         is_unique = 0;
         (*mapping)[i] = j;
+        nrs->coupling_vmap[idM] = j;
       }
     }
     if (is_unique == 1) {
@@ -558,6 +571,7 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
       vertices_temp[3 * unique_count + 1] = vertices_temp[3 * i + 1];
       vertices_temp[3 * unique_count + 2] = vertices_temp[3 * i + 2];
       (*mapping)[i] = unique_count;
+      nrs->coupling_vmap[idM] = unique_count;
       unique_count ++;
     }
   }
@@ -571,6 +585,9 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   nrs->o_coupling_data1.copyFrom(coupling->Get_data1());
   nrs->o_coupling_data2.copyFrom(coupling->Get_data2());
   nrs->o_coupling_mapping.copyFrom(coupling->Get_mapping());
+
+  nrs->o_coupling_vmap = platform->device.malloc(mesh->Nelements * mesh->Np * sizeof(dlong), nrs->coupling_vmap);
+  nrs->o_coupling_vmap.copyFrom(nrs->coupling_vmap);
 
   coupling->Setup(mesh_name, direct_mesh_name, data_name, bounding_box, data2_name, direct_data_name);
   //-----------------------------------------------------------------------------------------------------------------------------------

@@ -44,53 +44,25 @@
     @ restrict dfloat *UH,
     @ restrict dfloat *coupling_data1,
     @ restrict dfloat *coupling_data2,
-    @ restrict dlong  *mapping)
+    @ restrict dlong  *mapping,
+    @ restrict const dfloat *vgeo,
+    @ restrict const dfloat *D,
+    @ restrict const dfloat *Ue,
+    @ restrict const dlong *coupling_vmap)
 {
 int mapping_counter = 0;
 for (dlong e = 0; e < Nelements; e++; @outer(0)) {
-
 for (int f = 0; f < p_Nfaces; f++) {
-for (int m = 0; m < p_Nfp; ++m; @inner(0)) {
-const int n = m + f * p_Nfp;
-const int sk = e * p_Nfp * p_Nfaces + n;
-const dlong idM = vmapM[sk];
-const dlong bcType = EToB[f + p_Nfaces * e];
+// it seems that the order of the faces is the following:
+//      x-: 4
+//      x+: 2
+//      y-: 1
+//      y+: 3
+//      z-: 0
+//      z+: 5
 
-if (bcType > 0) {
-if (bcType == p_bcTypeONX) {
-UH[idM + 1 * offset] = 0.0;
-UH[idM + 2 * offset] = 0.0;
-}
-else if (bcType == p_bcTypeONY) {
-UH[idM + 0 * offset] = 0.0;
-UH[idM + 2 * offset] = 0.0;
-}
-else if (bcType == p_bcTypeONZ) {
-UH[idM + 0 * offset] = 0.0;
-UH[idM + 1 * offset] = 0.0;
-}
-else if (bcType == p_bcTypeON) {
-// handled in ellipticApplyMask
-}
-else if (bcType == p_bcTypeSYMX || bcType == p_bcTypeSHLX) {
-UH[idM + 0 * offset] = 0.0;
-}
-else if (bcType == p_bcTypeSYMY || bcType == p_bcTypeSHLY) {
-UH[idM + 1 * offset] = 0.0;
-}
-else if (bcType == p_bcTypeSYMZ || bcType == p_bcTypeSHLZ) {
-UH[idM + 2 * offset] = 0.0;
-}
-else if (bcType == p_bcTypeSYM || bcType == p_bcTypeSHL) {
-// handled in ellipticApplyMask
-}
-}
-}
-@barrier();
-}
-for (int f = 0; f < p_Nfaces; f++) {
 for (int m = 0; m < p_Nfp; ++m; @inner(0)) {
-struct bcData bc;
+
 const int n = m + f * p_Nfp;
 const int sk = e * p_Nfp * p_Nfaces + n;
 const dlong sid = e * p_Nfaces * p_Nfp + n;
@@ -98,56 +70,114 @@ const dlong idM = vmapM[sk];
 const dlong bcType = EToB[f + p_Nfaces * e];
 
 if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
-bc.id = EToBM[f + p_Nfaces * e];
-bc.idM = idM;
-bc.time = time;
-bc.x = x[idM];
-bc.y = y[idM];
-bc.z = z[idM];
 
-bc.nx = sgeo[sid * p_Nsgeo + p_NXID];
-bc.ny = sgeo[sid * p_Nsgeo + p_NYID];
-bc.nz = sgeo[sid * p_Nsgeo + p_NZID];
+    const dlong idM_el = idM - e * p_Np ;               // equivalent to k * p_Nq * p_Nq + j * p_Nq + i
+    const dlong idz = idM_el/(p_Nq * p_Nq);             //volumic z (k) index within this element 
+    dlong remainder = idM_el % (p_Nq * p_Nq);            
+    const dlong idy = remainder / p_Nq;                 //volumic y (j) index within this element 
+    const dlong idx = remainder % p_Nq;                 //volumic x (i) index within this element 
+    const dlong gid = e * p_Np * p_Nvgeo + idM_el ;
+    const dfloat drdx = vgeo[gid + p_RXID * p_Np];
+    const dfloat drdy = vgeo[gid + p_RYID * p_Np];
+    const dfloat drdz = vgeo[gid + p_RZID * p_Np];
+    const dfloat dsdx = vgeo[gid + p_SXID * p_Np];
+    const dfloat dsdy = vgeo[gid + p_SYID * p_Np];
+    const dfloat dsdz = vgeo[gid + p_SZID * p_Np];
+    const dfloat dtdx = vgeo[gid + p_TXID * p_Np];
+    const dfloat dtdy = vgeo[gid + p_TYID * p_Np];
+    const dfloat dtdz = vgeo[gid + p_TZID * p_Np];
+    const dfloat JW = vgeo[gid + p_JWID * p_Np]/vgeo[gid + p_JWID * p_Np];
+    
 
-bc.t1x = sgeo[sid * p_Nsgeo + p_T1XID];
-bc.t1y = sgeo[sid * p_Nsgeo + p_T1YID];
-bc.t1z = sgeo[sid * p_Nsgeo + p_T1ZID];
+    const int mapping_ID = mapping[mapping_counter];    
+    UH[idM + 0 * offset] = coupling_data1[3 * mapping_ID + 0 ];
+    UH[idM + 1 * offset] = coupling_data1[3 * mapping_ID + 1 ];
+    UH[idM + 2 * offset] = coupling_data1[3 * mapping_ID + 2 ];
 
-bc.t2x = sgeo[sid * p_Nsgeo + p_T2XID];
-bc.t2y = sgeo[sid * p_Nsgeo + p_T2YID];
-bc.t2z = sgeo[sid * p_Nsgeo + p_T2ZID];
+    if ((f == 4)) {
 
-bc.u = U[idM + 0 * offset];
-bc.v = U[idM + 1 * offset];
-bc.w = U[idM + 2 * offset];
+        dfloat dvdx = 0.; // this is not the actual derivative, as it misses the first point on the line of evaluation (i.e., the unknonwn)
+        dfloat dwdx = 0.; 
 
-bc.uinterp = 0.0;
-bc.vinterp = 0.0;
-bc.winterp = 0.0;
+        for (int n = 1; n < p_Nq; ++n) {
+            const dlong idM_local = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + n;
+            const dfloat Dr = D[idx * p_Nq + n];
+            double vpred = 2. * U[idM_local + 1 * offset] - 1.0 * U[idM_local + 1 * offset + 6*offset];
+            double wpred = 2. * U[idM_local + 2 * offset] - 1.0 * U[idM_local + 2 * offset + 6*offset];
+            dvdx += Dr * vpred;  // dvdx += Dr * Ue[idM_local + 1 * offset];
+            dwdx += Dr * wpred;  // dwdx += Dr * Ue[idM_local + 2 * offset];
+            if ((e == 36) &&((m==9))) {
+                printf("%d %.16f %.16f  %.16f %.16f \n", n, Dr, wpred, U[idM_local + 2 * offset],U[idM_local + 2 * offset + 6*offset]);
 
-bc.trans = rho[idM];
-bc.diff = mue[idM];
+            }
+            
+        }
+        dfloat dudy = 0.; // this is the actual derivative as we have all the points
+        
+        for (int n = 0; n < p_Nq; ++n) {
+            const dlong idM_local = e * p_Np + idz * p_Nq * p_Nq + n * p_Nq + idx;
+            const dlong id_coupling = coupling_vmap[idM_local];
+            const dfloat ul_vpm = coupling_data1[3 * id_coupling + 0 ];
+            const dfloat Ds = D[idy * p_Nq + n];
+            dudy += Ds * ul_vpm;
+        }
 
-bc.usrwrk = W;
-bc.fieldOffset = offset;
+        dfloat dudz = 0.;
+        for (int n = 0; n < p_Nq; ++n) {
+            const dlong idM_local = e * p_Np + n * p_Nq * p_Nq + idy * p_Nq + idx;
+            const dlong id_coupling = coupling_vmap[idM_local];
+            const dfloat ul_vpm = coupling_data1[3 * id_coupling + 0 ];
+            const dfloat Dt = D[idz * p_Nq + n];
+            dudz += Dt * ul_vpm;
+        }
+        const int id = mapping[mapping_counter];
+        const double u_VPM   = coupling_data1[3 * id + 0 ];
+        const double omy_VPM = coupling_data2[3 * id + 1 ];
+        const double omz_VPM = coupling_data2[3 * id + 2 ];
+        const dfloat Dr = D[idx * p_Nq + 0];
 
-if (bcType == p_bcTypeINT) {
-const int neknekId = neknekPoints[idM];
-const dlong neknekOffset = neknekPoints[offset];
-bc.uinterp = neknekU[neknekId + 0 * neknekOffset];
-bc.vinterp = neknekU[neknekId + 1 * neknekOffset];
-bc.winterp = neknekU[neknekId + 2 * neknekOffset];
-}
+        UH[idM + 0 * offset] = u_VPM;
+        UH[idM + 1 * offset] = ((1/drdx)*(omz_VPM/JW + dsdy*dudy) - dvdx)/Dr;
+        UH[idM + 2 * offset] = ((1/drdx)*(-omy_VPM/JW + dtdz*dudz) - dwdx)/Dr;//(dwdx - (1/drdx)*(omy_VPM/JW + dtdz*dudz))/Dr;
 
-// velocityDirichletConditions(&bc);
+        //comp with nek5000
+        if ((e == 36) &&((m==9))) {
+            printf("\n\n-----------------------------------------------------\n");
+            printf("Element %d, node %d , x: %f  y: %f  z: %f  \n", e,m, x[idM], y[idM], z[idM]);
+            printf("Vpm u: %.16f  v: %.16f  w:  %.16f\n",coupling_data1[3 * id + 0 ],coupling_data1[3 * id + 1 ],coupling_data1[3 * id + 2 ] );
+            printf("Vpm wx: %.16f  wy:%.16f  wz:  %.16f\n",coupling_data2[3 * id + 0 ],coupling_data2[3 * id + 1 ],coupling_data2[3 * id + 2 ] );
+            printf("dudy: %.16f  dudz: %.16f\n", dudy, dudz);
+            printf("dvdx: %.16f  dwdx: %.16f\n", dvdx, dwdx);
+            printf("drdx: %.16f  JW: %.16f  Dr: %.16f\n", drdx, JW, Dr);
+            printf("V: %.16f   W: %.16f\n",UH[idM + 1 * offset], UH[idM + 2 * offset] );
 
-// UH[idM + 0 * offset] = bc.u;
-// UH[idM + 1 * offset] = bc.v;
-// UH[idM + 2 * offset] = bc.w;
-const int mapping_ID = mapping[mapping_counter];
-UH[idM + 0 * offset] = coupling_data1[3 * mapping_ID ];
-UH[idM + 1 * offset] = coupling_data1[3 * mapping_ID + 1 ];
-UH[idM + 2 * offset] = coupling_data1[3 * mapping_ID + 2 ];
+        }
+
+        //printf("vpm %.16f  %.16f  %.16f\n",coupling_data1[3 * id + 0 ],coupling_data1[3 * id + 1 ],coupling_data1[3 * id + 2 ] );
+        //printf("nek %.16f  %.16f  %.16f\n",UH[idM + 0 * offset],UH[idM + 1 * offset],UH[idM + 2 * offset] );
+
+        double omz_test = JW*((Dr * UH[idM + 1 * offset] + dvdx)*drdx - dudy*dsdy );
+        double omy_test = JW*(dudz*dtdz - (Dr * UH[idM + 2 * offset] + dwdx)*drdx) ;
+
+    }
+
+    UH[idM + 0 * offset] = coupling_data1[3 * mapping_ID + 0 ];
+    UH[idM + 1 * offset] = coupling_data1[3 * mapping_ID + 1 ];
+    UH[idM + 2 * offset] = coupling_data1[3 * mapping_ID + 2 ];
+    
+    
+
+
+
+// const int mapping_ID = mapping[mapping_counter];
+// double u_VPM, v_VPM, w_VPM;
+// double omx_VPM, omy_VPM, omz_VPM;
+// u_VPM   = coupling_data1[3 * mapping_ID + 0 ];
+// v_VPM   = coupling_data1[3 * mapping_ID + 1 ];
+// w_VPM   = coupling_data1[3 * mapping_ID + 2 ];
+// omx_VPM = coupling_data2[3 * mapping_ID + 0 ];
+// omy_VPM = coupling_data2[3 * mapping_ID + 1 ];
+// omz_VPM = coupling_data2[3 * mapping_ID + 2 ];
 
 mapping_counter ++;
 
