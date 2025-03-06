@@ -51,6 +51,32 @@
     @ restrict const dlong *coupling_vmap)
 {
 int mapping_counter = 0;
+
+int foo_pidx, foo_pidy, foo_pidz, foo_pn; //unused variable, just used to declare and assign the const pointers
+int * const p_idx = &foo_pidx;
+int * const p_idy = &foo_pidy;
+int * const p_idz = &foo_pidz;
+int * const p_n = &foo_pn;
+
+int * i1;
+int * i2;
+int * i3;
+int * id1;
+
+int off_field;
+int ind_beg, ind_end, ind_unk;
+
+int * list_i1[6] = {p_n  , p_idz, p_idz, p_idz, p_idz, p_n};
+int * list_i2[6] = {p_idy, p_n  , p_idy, p_n  , p_idy, p_idy};
+int * list_i3[6] = {p_idx  , p_idx, p_n, p_idx, p_n  , p_idx};
+int * list_id1[6] = {p_idz, p_idy, p_idx, p_idy, p_idx, p_idz};
+int list_off_field[6] = {2, 1, 0, 1, 0, 2};
+
+int list_ind_beg[6] = {1, 1, 0, 0, 1, 0};
+int list_ind_end[6] = {p_Nq, p_Nq, p_Nq - 1, p_Nq - 1, p_Nq, p_Nq - 1};
+int list_ind_unk[6] = {0, 0, p_Nq - 1, p_Nq - 1, 0, p_Nq - 1};
+
+
 for (dlong e = 0; e < Nelements; e++; @outer(0)) {
 for (int f = 0; f < p_Nfaces; f++) {
 // it seems that the order of the faces is the following:
@@ -60,6 +86,16 @@ for (int f = 0; f < p_Nfaces; f++) {
 //      y+: 3
 //      z-: 0
 //      z+: 5
+
+i1        = list_i1[f];
+i2        = list_i2[f];
+i3        = list_i3[f];
+id1       = list_id1[f];
+off_field = list_off_field[f];
+ind_beg   = list_ind_beg[f];
+ind_end   = list_ind_end[f];
+ind_unk   = list_ind_unk[f];
+
 
 for (int m = 0; m < p_Nfp; ++m; @inner(0)) {
 
@@ -72,40 +108,17 @@ const dlong bcType = EToB[f + p_Nfaces * e];
 if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
 
     const dlong idM_el = idM - e * p_Np ;               // equivalent to k * p_Nq * p_Nq + j * p_Nq + i
-    const dlong idz = idM_el/(p_Nq * p_Nq);             //volumic z (k) index within this element 
-    dlong remainder = idM_el % (p_Nq * p_Nq);            
-    const dlong idy = remainder / p_Nq;                 //volumic y (j) index within this element 
-    const dlong idx = remainder % p_Nq;                 //volumic x (i) index within this element 
+    *(p_idz) = idM_el/(p_Nq * p_Nq);             //volumic z (k) index within this element 
+    const dlong remainder = idM_el % (p_Nq * p_Nq);            
+    *(p_idy) = remainder / p_Nq;                 //volumic y (j) index within this element 
+    *(p_idx) = remainder % p_Nq;                 //volumic x (i) index within this element 
     const dlong gid = e * p_Np * p_Nvgeo + idM_el ;
     const dfloat drdx = vgeo[gid + p_RXID * p_Np];
-    const dfloat drdy = vgeo[gid + p_RYID * p_Np];
-    const dfloat drdz = vgeo[gid + p_RZID * p_Np];
-    const dfloat dsdx = vgeo[gid + p_SXID * p_Np];
     const dfloat dsdy = vgeo[gid + p_SYID * p_Np];
-    const dfloat dsdz = vgeo[gid + p_SZID * p_Np];
-    const dfloat dtdx = vgeo[gid + p_TXID * p_Np];
-    const dfloat dtdy = vgeo[gid + p_TYID * p_Np];
     const dfloat dtdz = vgeo[gid + p_TZID * p_Np];
-    const dfloat JW = vgeo[gid + p_JWID * p_Np]/vgeo[gid + p_JWID * p_Np];
+    const dfloat dr_s[3] = {drdx, dsdy, dtdz};
     
-
-    const int mapping_ID = mapping[mapping_counter];    
-    UH[idM + 0 * offset] = coupling_data1[3 * mapping_ID + 0 ];
-    UH[idM + 1 * offset] = coupling_data1[3 * mapping_ID + 1 ];
-    UH[idM + 2 * offset] = coupling_data1[3 * mapping_ID + 2 ];
-
-    int ind_beg, ind_end, ind_unk;
-    if ((f == 4) || (f == 1) || (f == 0)){
-        ind_beg = 1;
-        ind_end = p_Nq;
-        ind_unk = 0;
-    } else {
-        ind_beg = 0;
-        ind_end = p_Nq - 1;
-        ind_unk = p_Nq - 1;
-    }
-
-    if ((f == 0) || 1) {
+    {
 
         //equivalents:   x-      y-       z-
         //dvdx           dvdx    dwdy     dudz
@@ -124,155 +137,49 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
         dfloat dvdx = 0.; // this is not the actual derivative, as it misses the first point on the line of evaluation (i.e., the unknonwn)
         dfloat dwdx = 0.; 
 
-        for (int n = ind_beg; n < ind_end; ++n) {
-            int i1,i2,i3,id1;
-            int off_field;
-            if (f == 4 || f == 2) { //x-
-                i1 = idz;
-                i2 = idy;
-                i3 = n;
-                id1 = idx;
-                off_field = 0;
-            } else if (f == 1 || f == 3) { //y-
-                i1 = idz;
-                i2 = n;
-                i3 = idx;
-                id1 = idy;
-                off_field = 1;
-            } else if (f == 0 || f == 5) { //z-
-                i1 = n;
-                i2 = idy;
-                i3 = idx;
-                id1 = idz;
-                off_field = 2;
-            }
-            const dlong idM_local = e * p_Np + i1 * p_Nq * p_Nq + i2 * p_Nq + i3;
-            const dfloat Dr = D[id1 * p_Nq + n];
+        for ( (*p_n) = ind_beg; (*p_n) < ind_end; ++(*p_n)) {
+            const dlong idM_local = e * p_Np + (*i1) * p_Nq * p_Nq + (*i2) * p_Nq + (*i3);
+            const dfloat Dr = D[(*id1) * p_Nq + (*p_n)];
             double vpred = 2. * U[idM_local + ((off_field + 1) % 3) * offset] - 1.0 * U[idM_local + ((off_field + 1) % 3) * offset + 6 * offset];
             double wpred = 2. * U[idM_local + ((off_field + 2) % 3) * offset] - 1.0 * U[idM_local + ((off_field + 2) % 3) * offset + 6 * offset];
             dvdx += Dr * vpred;  // dvdx += Dr * Ue[idM_local + 1 * offset];
-            dwdx += Dr * wpred;  // dwdx += Dr * Ue[idM_local + 2 * offset];
-            // if ((e == 36) &&((m==9))) {
-            //     printf("%d %.16f %.16f  %.16f %.16f \n", n, Dr, wpred, U[idM_local + 2 * offset],U[idM_local + 2 * offset + 6 * offset]);
-
-            // }
-            
+            dwdx += Dr * wpred;  // dwdx += Dr * Ue[idM_local + 2 * offset];       
         }
+
         dfloat dudy = 0.; // this is the actual derivative as we have all the points
-        
-        for (int n = 0; n < p_Nq; ++n) {
-            int i1,i2,i3,id1;
-            int off_field;
-            if (f == 4 || f == 2) { //x-
-                i1 = idz;
-                i2 = n;
-                i3 = idx;
-                id1 = idy;
-                off_field = 0;
-            } else if (f == 1 || f == 3) { //y-
-                i1 = n;
-                i2 = idy;
-                i3 = idx;
-                id1 = idz;
-                off_field = 1;
-            } else if (f == 0 || f == 5) { //z-
-                i1 = idz;
-                i2 = idy;
-                i3 = n;
-                id1 = idx;
-                off_field = 2;
-            }
-            const dlong idM_local = e * p_Np + i1 * p_Nq * p_Nq + i2 * p_Nq + i3;
+        for ((*p_n) = 0; (*p_n) < p_Nq; ++(*p_n)) {
+            const dlong idM_local = e * p_Np + (*i1) * p_Nq * p_Nq + (*i2) * p_Nq + (*i3);
             const dlong id_coupling = coupling_vmap[idM_local];
             const dfloat ul_vpm = coupling_data1[3 * id_coupling + off_field ];
-            const dfloat Ds = D[id1 * p_Nq + n];
+            const dfloat Ds = D[(*id1) * p_Nq + (*p_n)];
             dudy += Ds * ul_vpm;
         }
 
         dfloat dudz = 0.;
-        for (int n = 0; n < p_Nq; ++n) {
-            int i1,i2,i3,id1;
-            int off_field;
-            if (f == 4 || f == 2) { //x-
-                i1 = n;
-                i2 = idy;
-                i3 = idx;
-                id1 = idz;
-                off_field = 0;
-            } else if (f == 1 || f == 3) { //y-
-                i1 = idz;
-                i2 = idy;
-                i3 = n;
-                id1 = idx;
-                off_field = 1;
-            } else if (f == 0 || f == 5) { //z-
-                i1 = idz;
-                i2 = n;
-                i3 = idx;
-                id1 = idy;
-                off_field = 2;
-            }
-            const dlong idM_local = e * p_Np + i1 * p_Nq * p_Nq + i2 * p_Nq + i3;
+        for ((*p_n) = 0; (*p_n) < p_Nq; ++(*p_n)) {
+            const dlong idM_local = e * p_Np + (*i1) * p_Nq * p_Nq + (*i2) * p_Nq + (*i3);
             const dlong id_coupling = coupling_vmap[idM_local];
             const dfloat ul_vpm = coupling_data1[3 * id_coupling + off_field ];
-            const dfloat Dt = D[id1 * p_Nq + n];
+            const dfloat Dt = D[(*id1) * p_Nq + (*p_n)];
             dudz += Dt * ul_vpm;
         }
-        int off_field, id1;
-        double my_drdx,my_dsdy,my_dtdz;
-        if (f == 4 || f == 2) { //x-
-            off_field = 0;
-            id1 = idx;
-            my_drdx = drdx;
-            my_dsdy = dsdy;
-            my_dtdz = dtdz;
-        } else if (f == 1 || f == 3) { //y-
-            off_field = 1;
-            id1 = idy;
-            my_drdx = dsdy;
-            my_dsdy = dtdz;
-            my_dtdz = drdx;
-        } else if (f == 0 || f == 5) { //z-
-            off_field = 2;
-            id1 = idz;
-            my_drdx = dtdz;
-            my_dsdy = drdx;
-            my_dtdz = dsdy;
-        }
+        const dfloat my_drdx = dr_s[(0 + off_field) % 3];
+        const dfloat my_dsdy = dr_s[(1 + off_field) % 3];
+        const dfloat my_dtdz = dr_s[(2 + off_field) % 3];
+
         const int id = mapping[mapping_counter];
         const double u_VPM   = coupling_data1[3 * id + (0 + off_field) % 3 ];
         const double omy_VPM = coupling_data2[3 * id + (1 + off_field) % 3 ];
         const double omz_VPM = coupling_data2[3 * id + (2 + off_field) % 3 ];
-        const dfloat Dr = D[id1 * p_Nq + id1];
+        const dfloat Dr = D[(*id1) * p_Nq + (*id1)];
 
         UH[idM + ((0 + off_field) % 3) * offset] = u_VPM;
-        UH[idM + ((1 + off_field) % 3) * offset] = ((1/my_drdx)*(omz_VPM/JW + my_dsdy*dudy) - dvdx)/Dr;
-        UH[idM + ((2 + off_field) % 3) * offset] = ((1/my_drdx)*(-omy_VPM/JW + my_dtdz*dudz) - dwdx)/Dr;//(dwdx - (1/drdx)*(omy_VPM/JW + dtdz*dudz))/Dr;
+        UH[idM + ((1 + off_field) % 3) * offset] = ((1/my_drdx)*(omz_VPM + my_dsdy*dudy) - dvdx)/Dr;
+        UH[idM + ((2 + off_field) % 3) * offset] = ((1/my_drdx)*(-omy_VPM + my_dtdz*dudz) - dwdx)/Dr;//(dwdx - (1/drdx)*(omy_VPM/JW + dtdz*dudz))/Dr;
 
-        //comp with nek5000
-        // if ((e == 36) &&((m==9))) {
-        //     printf("\n\n-----------------------------------------------------\n");
-        //     printf("Element %d, node %d , x: %f  y: %f  z: %f  \n", e,m, x[idM], y[idM], z[idM]);
-        //     printf("Vpm u: %.16f  v: %.16f  w:  %.16f\n",coupling_data1[3 * id + 0 ],coupling_data1[3 * id + 1 ],coupling_data1[3 * id + 2 ] );
-        //     printf("Vpm wx: %.16f  wy:%.16f  wz:  %.16f\n",coupling_data2[3 * id + 0 ],coupling_data2[3 * id + 1 ],coupling_data2[3 * id + 2 ] );
-        //     printf("dudy: %.16f  dudz: %.16f\n", dudy, dudz);
-        //     printf("dvdx: %.16f  dwdx: %.16f\n", dvdx, dwdx);
-        //     printf("drdx: %.16f  JW: %.16f  Dr: %.16f\n", drdx, JW, Dr);
-        //     printf("V: %.16f   W: %.16f\n",UH[idM + 1 * offset], UH[idM + 2 * offset] );
 
-        // }
-        if(e == 0 && idx == 0 && idy == 0 && idz == 0){
-            printf("\n\n-----------------------------------------------------\n");
-            printf("face %d \n", f);
-             printf("Element %d, node %d , x: %f  y: %f  z: %f  \n", e,m, x[idM], y[idM], z[idM]);
-             printf("U: %.16f  V: %.16f   W: %.16f\n",UH[idM + 0 * offset],UH[idM + 1 * offset], UH[idM + 2 * offset] );
-        }
-
-        //printf("vpm %.16f  %.16f  %.16f\n",coupling_data1[3 * id + 0 ],coupling_data1[3 * id + 1 ],coupling_data1[3 * id + 2 ] );
-        //printf("nek %.16f  %.16f  %.16f\n",UH[idM + 0 * offset],UH[idM + 1 * offset],UH[idM + 2 * offset] );
-
-        double omz_test = JW*((Dr * UH[idM + 1 * offset] + dvdx)*drdx - dudy*dsdy );
-        double omy_test = JW*(dudz*dtdz - (Dr * UH[idM + 2 * offset] + dwdx)*drdx) ;
+        double omz_test = ((Dr * UH[idM + 1 * offset] + dvdx)*drdx - dudy*dsdy );
+        double omy_test =(dudz*dtdz - (Dr * UH[idM + 2 * offset] + dwdx)*drdx) ;
 
     }
 
@@ -280,19 +187,6 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     // UH[idM + 1 * offset] = coupling_data1[3 * mapping_ID + 1 ];
     // UH[idM + 2 * offset] = coupling_data1[3 * mapping_ID + 2 ];
     
-    
-
-
-
-// const int mapping_ID = mapping[mapping_counter];
-// double u_VPM, v_VPM, w_VPM;
-// double omx_VPM, omy_VPM, omz_VPM;
-// u_VPM   = coupling_data1[3 * mapping_ID + 0 ];
-// v_VPM   = coupling_data1[3 * mapping_ID + 1 ];
-// w_VPM   = coupling_data1[3 * mapping_ID + 2 ];
-// omx_VPM = coupling_data2[3 * mapping_ID + 0 ];
-// omy_VPM = coupling_data2[3 * mapping_ID + 1 ];
-// omz_VPM = coupling_data2[3 * mapping_ID + 2 ];
 
 mapping_counter ++;
 
