@@ -23,6 +23,14 @@ struct nrs_t {
   occa::memory o_coupling_mapping;
   dlong *coupling_vmap;
   occa::memory o_coupling_vmap;
+  dfloat *coupling_bbox;
+  occa::memory o_coupling_bbox;
+
+  dlong *coupling_emap; // are the element vertices an edge of the domain?
+  occa::memory o_coupling_emap;
+
+  dlong *coupling_cmap; // ar ethe corners also corners of the domain?
+  occa::memory o_coupling_cmap;
 
   static constexpr double targetTimeBenchmark {0.2};
 

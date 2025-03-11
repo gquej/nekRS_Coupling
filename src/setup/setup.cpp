@@ -477,13 +477,13 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   std::string_view solver_name = "Nek";
   std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
 
-  double bounding_box[6];
-  bounding_box[0] = 0.25;
-  bounding_box[1] = 0.75;
-  bounding_box[2] = 0.25;
-  bounding_box[3] = 0.75;
-  bounding_box[4] = 0.25;
-  bounding_box[5] = 0.75;
+  nrs->coupling_bbox = new double[6];
+  nrs->coupling_bbox[0] = 0.25;
+  nrs->coupling_bbox[1] = 0.75;
+  nrs->coupling_bbox[2] = 0.25;
+  nrs->coupling_bbox[3] = 0.75;
+  nrs->coupling_bbox[4] = 0.25;
+  nrs->coupling_bbox[5] = 0.75;
   precice::string_view mesh_name = "Nek-Mesh";
   precice::string_view direct_mesh_name = "Murphy-Mesh";
   precice::string_view data_name = "Murphy_u";
@@ -495,6 +495,8 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
 
   int p_Nfaces = mesh->Nfaces;
   int p_Nfp = mesh->Nfp;
+  int p_Np = mesh->Np;
+  int p_Nq = mesh->Nq;
   int N_elements = mesh->Nelements;
   int boundary_points_counter = 0;
 
@@ -575,6 +577,64 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
       unique_count ++;
     }
   }
+  //identify the element edges that are edges of the global domain
+  nrs->coupling_emap = (dlong*) calloc(N_elements * 12, sizeof(dlong));
+  nrs->coupling_cmap = (dlong*) calloc(N_elements * 8, sizeof(dlong));
+  double *bb = nrs->coupling_bbox;
+  double x, y, z;
+  int idM;
+  int list_idx[4] = {0, 0   , 0   , 0   };//, 0, 0, p_Nq, p_Nq, 0, p_Nq, p_Nq, 0};
+  int list_idy[4] = {0, p_Nq - 1, p_Nq - 1, 0   };//, 0, 0, 0, 0, 0, 0, p_Nq, p_Nq};
+  int list_idz[4] = {0, 0   , p_Nq - 1, p_Nq - 1};//, 0, p_Nq, p_Nq, 0, 0, 0, 0, 0};
+  int * list_list_id[3] = {list_idx, list_idy, list_idz};
+  double * list_nek[3] = {nek_x, nek_y, nek_z};
+
+  double list_bby[12] = {bb[2], bb[3], bb[3], bb[2], bb[4], bb[5], bb[5], bb[4], bb[0], bb[1], bb[1], bb[0]};
+  double list_bbz[12] = {bb[4], bb[4], bb[5], bb[5], bb[0], bb[0], bb[1], bb[1], bb[2], bb[2], bb[3], bb[3]};
+  for (dlong e = 0; e < N_elements; e++) {
+    for (dlong j = 0; j < 3; ++j) {
+
+      for (dlong i = 0; i < 4; i++) {
+        idM = e * p_Np + list_list_id[(3 - j + 2) % 3][i] * p_Nq * p_Nq + list_list_id[(3 - j + 1) % 3][i] * p_Nq + list_list_id[(3 - j + 0) % 3][i];
+        x = list_nek[(j + 0) % 3][idM];
+        y = list_nek[(j + 1) % 3][idM];
+        z = list_nek[(j + 2) % 3][idM];
+        if ((abs(y - list_bby[i + 4 * j]) < tol) && (abs(z - list_bbz[i + 4 * j]) < tol)) {
+          nrs->coupling_emap[e * 12 + 4 * j + i] = 1;
+        }
+        if (e == 0 && 0) {
+          printf ("\n i: %d , j: %d\n", i, j);
+          printf("%d %d %d\n", (3 -j + 2) % 3, (3 -j + 1) % 3, (3 -j + 0) % 3);
+          printf("idz: %d, idy: %d, idx: %d\n",list_list_id[(3 - j + 2) % 3][i],list_list_id[(3 - j + 1) % 3][i],  list_list_id[(3 - j + 0) % 3][i]);
+          printf("x: %f, y: %f, z: %f\n", x, y , z);
+          printf("bby: %f, bbz: %f\n",list_bby[i + 4 * j],list_bbz[i + 4 * j] );
+          printf("result: %d\n",nrs->coupling_emap[e * 12 + 4 * j + i + 1] );
+        }
+      }
+    }    
+
+    //now check for the corners
+    for (int i = 0; i < 2; i++)
+    {
+      for (int j = 0; j < 2; j++)
+      {
+        for (int k = 0; k < 2; k++)
+        {
+          idM = e * p_Np + (k * (p_Nq - 1)) * p_Nq * p_Nq + (j * (p_Nq - 1)) * p_Nq + (i * (p_Nq - 1));
+          x = nek_x[idM];
+          y = nek_y[idM];
+          z = nek_z[idM];
+          if ((abs(x - bb[0 + i]) < tol) && (abs(y - bb[2 + j]) < tol) && (abs(z - bb[4 + k]) < tol)) {
+            nrs->coupling_cmap[e * 8 + i * 4 + j * 2 + k] = 1;
+            printf("found global domain corner, e %d, x %f y %f z %f\n", e, x, y, z);
+          }
+        }
+        
+      }
+      
+    }
+        
+  }
 
   coupling->Set_vertices(vertices_temp, unique_count);
 
@@ -589,7 +649,16 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   nrs->o_coupling_vmap = platform->device.malloc(mesh->Nelements * mesh->Np * sizeof(dlong), nrs->coupling_vmap);
   nrs->o_coupling_vmap.copyFrom(nrs->coupling_vmap);
 
-  coupling->Setup(mesh_name, direct_mesh_name, data_name, bounding_box, data2_name, direct_data_name);
+  nrs->o_coupling_emap = platform->device.malloc(N_elements * 12 * sizeof(dlong), nrs->coupling_emap);
+  nrs->o_coupling_emap.copyFrom(nrs->coupling_emap);
+
+  nrs->o_coupling_cmap = platform->device.malloc(N_elements * 8 * sizeof(dlong), nrs->coupling_cmap);
+  nrs->o_coupling_cmap.copyFrom(nrs->coupling_cmap);
+
+  nrs->o_coupling_bbox = platform->device.malloc(6 * sizeof(dlong), nrs->coupling_bbox);
+  nrs->o_coupling_bbox.copyFrom(nrs->coupling_bbox);
+  coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name);
+  
   //-----------------------------------------------------------------------------------------------------------------------------------
 
 

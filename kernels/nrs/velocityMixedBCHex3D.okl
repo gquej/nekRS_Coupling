@@ -48,7 +48,10 @@
     @ restrict const dfloat *vgeo,
     @ restrict const dfloat *D,
     @ restrict const dfloat *Ue,
-    @ restrict const dlong *coupling_vmap)
+    @ restrict const dlong *coupling_vmap,
+    @ restrict const dlong *bounding_box,
+    @ restrict const dlong *coupling_emap,
+    @ restrict const dlong *coupling_cmap)
 {
 int mapping_counter = 0;
 
@@ -63,19 +66,44 @@ int * i2;
 int * i3;
 int * id1;
 
+int * i1_1;
+int * i2_1;
+int * i3_1;
+int * id1_1;
+
+int * i1_2;
+int * i2_2;
+int * i3_2;
+int * id1_2;
+
 int off_field;
 int ind_beg, ind_end, ind_unk;
 
-int * list_i1[6] = {p_n  , p_idz, p_idz, p_idz, p_idz, p_n};
-int * list_i2[6] = {p_idy, p_n  , p_idy, p_n  , p_idy, p_idy};
-int * list_i3[6] = {p_idx  , p_idx, p_n, p_idx, p_n  , p_idx};
-int * list_id1[6] = {p_idz, p_idy, p_idx, p_idy, p_idx, p_idz};
+int * list_i1[6]   = {p_n    , p_idz, p_idz, p_idz, p_idz, p_n};
+int * list_i1_1[6] = {p_idz  , p_n  , p_idz, p_n  , p_idz, p_idz};
+int * list_i1_2[6] = {p_idz  , p_idz, p_n  , p_idz, p_n  , p_idz};
+
+int * list_i2[6]   = {p_idy  , p_n  , p_idy, p_n  , p_idy, p_idy};
+int * list_i2_1[6] = {p_idy  , p_idy, p_n  , p_idy, p_n  , p_idy};
+int * list_i2_2[6] = {p_n    , p_idy, p_idy, p_idy, p_idy, p_n};
+
+int * list_i3[6]   = {p_idx  , p_idx, p_n  , p_idx, p_n  , p_idx};
+int * list_i3_1[6] = {p_n    , p_idx, p_idx, p_idx, p_idx, p_n};
+int * list_i3_2[6] = {p_idx  , p_n  , p_idx, p_n  , p_idx, p_idx};
+
+int * list_id1[6]   = {p_idz , p_idy, p_idx, p_idy, p_idx, p_idz};
+int * list_id1_1[6] = {p_idx , p_idz, p_idy, p_idz, p_idy, p_idx};
+int * list_id1_2[6] = {p_idy , p_idx, p_idz, p_idx, p_idz, p_idy};
 int list_off_field[6] = {2, 1, 0, 1, 0, 2};
 
 int list_ind_beg[6] = {1, 1, 0, 0, 1, 0};
 int list_ind_end[6] = {p_Nq, p_Nq, p_Nq - 1, p_Nq - 1, p_Nq, p_Nq - 1};
 int list_ind_unk[6] = {0, 0, p_Nq - 1, p_Nq - 1, 0, p_Nq - 1};
 
+//
+// dans la première boucle, on repère si le point est sur une arête/coin. Si oui, on note son index et on l'ajoute à une liste. 
+//puis on parcourt la liste et on vient chercher les voisins pour faire la moyenne.
+//ptet faire des listes différentes pour chaque arête?
 
 for (dlong e = 0; e < Nelements; e++; @outer(0)) {
 for (int f = 0; f < p_Nfaces; f++) {
@@ -91,6 +119,17 @@ i1        = list_i1[f];
 i2        = list_i2[f];
 i3        = list_i3[f];
 id1       = list_id1[f];
+
+i1_1        = list_i1_1[f];
+i2_1        = list_i2_1[f];
+i3_1        = list_i3_1[f];
+id1_1       = list_id1_1[f];
+
+i1_2        = list_i1_2[f];
+i2_2        = list_i2_2[f];
+i3_2        = list_i3_2[f];
+id1_2       = list_id1_2[f];
+
 off_field = list_off_field[f];
 ind_beg   = list_ind_beg[f];
 ind_end   = list_ind_end[f];
@@ -117,8 +156,13 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     const dfloat dsdy = vgeo[gid + p_SYID * p_Np];
     const dfloat dtdz = vgeo[gid + p_TZID * p_Np];
     const dfloat dr_s[3] = {drdx, dsdy, dtdz};
+
+    const int mapping_ID = mapping[mapping_counter];
+    UH[idM + 0 * offset] = coupling_data1[3 * mapping_ID + 0 ];
+    UH[idM + 1 * offset] = coupling_data1[3 * mapping_ID + 1 ];
+    UH[idM + 2 * offset] = coupling_data1[3 * mapping_ID + 2 ];
     
-    {
+    if (f == 0 || 1) {
 
         //equivalents:   x-      y-       z-
         //dvdx           dvdx    dwdy     dudz
@@ -143,24 +187,31 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
             double vpred = 2. * U[idM_local + ((off_field + 1) % 3) * offset] - 1.0 * U[idM_local + ((off_field + 1) % 3) * offset + 6 * offset];
             double wpred = 2. * U[idM_local + ((off_field + 2) % 3) * offset] - 1.0 * U[idM_local + ((off_field + 2) % 3) * offset + 6 * offset];
             dvdx += Dr * vpred;  // dvdx += Dr * Ue[idM_local + 1 * offset];
-            dwdx += Dr * wpred;  // dwdx += Dr * Ue[idM_local + 2 * offset];       
+            dwdx += Dr * wpred;  // dwdx += Dr * Ue[idM_local + 2 * offset];  
+            if ((e == 36) &&((m==9)) && 0) {
+                printf("1 %d vpred: %.16f, wpred: %.16f, Dr: %.16f\n",(*p_n), vpred, wpred, Dr);
+            }
+
         }
 
         dfloat dudy = 0.; // this is the actual derivative as we have all the points
         for ((*p_n) = 0; (*p_n) < p_Nq; ++(*p_n)) {
-            const dlong idM_local = e * p_Np + (*i1) * p_Nq * p_Nq + (*i2) * p_Nq + (*i3);
+            const dlong idM_local = e * p_Np + (*i1_1) * p_Nq * p_Nq + (*i2_1) * p_Nq + (*i3_1);
             const dlong id_coupling = coupling_vmap[idM_local];
             const dfloat ul_vpm = coupling_data1[3 * id_coupling + off_field ];
-            const dfloat Ds = D[(*id1) * p_Nq + (*p_n)];
+            const dfloat Ds = D[(*id1_1) * p_Nq + (*p_n)];
             dudy += Ds * ul_vpm;
+            if ((e == 36) &&((m==9)) && 0) {
+                printf("2 %d u: %.16f, Ds: %.16f\n",(*p_n), ul_vpm, Ds);
+            }
         }
 
         dfloat dudz = 0.;
         for ((*p_n) = 0; (*p_n) < p_Nq; ++(*p_n)) {
-            const dlong idM_local = e * p_Np + (*i1) * p_Nq * p_Nq + (*i2) * p_Nq + (*i3);
+            const dlong idM_local = e * p_Np + (*i1_2) * p_Nq * p_Nq + (*i2_2) * p_Nq + (*i3_2);
             const dlong id_coupling = coupling_vmap[idM_local];
             const dfloat ul_vpm = coupling_data1[3 * id_coupling + off_field ];
-            const dfloat Dt = D[(*id1) * p_Nq + (*p_n)];
+            const dfloat Dt = D[(*id1_2) * p_Nq + (*p_n)];
             dudz += Dt * ul_vpm;
         }
         const dfloat my_drdx = dr_s[(0 + off_field) % 3];
@@ -176,13 +227,24 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
         UH[idM + ((0 + off_field) % 3) * offset] = u_VPM;
         UH[idM + ((1 + off_field) % 3) * offset] = ((1/my_drdx)*(omz_VPM + my_dsdy*dudy) - dvdx)/Dr;
         UH[idM + ((2 + off_field) % 3) * offset] = ((1/my_drdx)*(-omy_VPM + my_dtdz*dudz) - dwdx)/Dr;//(dwdx - (1/drdx)*(omy_VPM/JW + dtdz*dudz))/Dr;
+        //printf(" %f %f %f\n",idM + ((0 + off_field) % 3) * offset, idM + ((1 + off_field) % 3) * offset, idM + ((2 + off_field) % 3) * offset );
+        //comp with nek5000
+        if ((e == 36) &&((m==9)) && 0) {
+            printf("\n\n-----------------------------------------------------\n");
+            printf("Element %d, node %d , x: %f  y: %f  z: %f  \n", e,m, x[idM], y[idM], z[idM]);
+            printf("Vpm u: %.16f  v: %.16f  w:  %.16f\n",coupling_data1[3 * id + 0 ],coupling_data1[3 * id + 1 ],coupling_data1[3 * id + 2 ] );
+            printf("Vpm wx: %.16f  wy:%.16f  wz:  %.16f\n",coupling_data2[3 * id + 0 ],coupling_data2[3 * id + 1 ],coupling_data2[3 * id + 2 ] );
+            printf("dudy: %.16f  dudz: %.16f\n", dudy, dudz);
+            printf("dvdx: %.16f  dwdx: %.16f\n", dvdx, dwdx);
+            printf("drdx: %.16f    Dr: %.16f\n", drdx, Dr);
+            printf("V: %.16f   W: %.16f\n",UH[idM + 1 * offset], UH[idM + 2 * offset] );
 
-
+        }
         double omz_test = ((Dr * UH[idM + 1 * offset] + dvdx)*drdx - dudy*dsdy );
         double omy_test =(dudz*dtdz - (Dr * UH[idM + 2 * offset] + dwdx)*drdx) ;
 
     }
-
+    //const int mapping_ID = mapping[mapping_counter];
     // UH[idM + 0 * offset] = coupling_data1[3 * mapping_ID + 0 ];
     // UH[idM + 1 * offset] = coupling_data1[3 * mapping_ID + 1 ];
     // UH[idM + 2 * offset] = coupling_data1[3 * mapping_ID + 2 ];
@@ -194,6 +256,71 @@ mapping_counter ++;
 }
 @barrier();
 }
+
+//now, looping over the edges that are edges on the global domain, to impose a mean value
+
+int y_nei[4] = {1, -1, -1,  1};
+int z_nei[4] = {1,  1, -1, -1};
+
+int list_idx[4] = {0, 0   , 0   , 0   };
+int list_idy[4] = {0, p_Nq - 1, p_Nq - 1, 0   };
+int list_idz[4] = {0, 0   , p_Nq - 1, p_Nq - 1};
+int * list_list_id[3] = {list_idx, list_idy, list_idz};
+
+for (int j = 0; j < 3; j++)
+{
+for (int i = 0; i < 4; i++)
+{
+if (coupling_emap[e * 12 + 4 * j + i])
+{
+    for (int n = 0; n < p_Nq; n++)
+    {
+        const int l_p[3]  = {n, list_idy[i]           , list_idz[i]            };
+        const int l_p1[3] = {n, list_idy[i] + y_nei[i], list_idz[i]            };
+        const int l_p2[3] = {n, list_idy[i]           , list_idz[i] + z_nei[i] };
+
+        const dlong idM    = e * p_Np +  l_p[(3 - j + 2) % 3] * p_Nq * p_Nq +  l_p[(3 - j + 1) % 3] * p_Nq +  l_p[(3 - j + 0) % 3];        
+        const dlong idM_n1 = e * p_Np + l_p1[(3 - j + 2) % 3] * p_Nq * p_Nq + l_p1[(3 - j + 1) % 3] * p_Nq + l_p1[(3 - j + 0) % 3];
+        const dlong idM_n2 = e * p_Np + l_p2[(3 - j + 2) % 3] * p_Nq * p_Nq + l_p2[(3 - j + 1) % 3] * p_Nq + l_p2[(3 - j + 0) % 3];
+
+        // if (n == 2 && 1) {        
+        // printf("e: %d, j: %d, i: %d\n", e, j, i);
+        // printf("1: %d %d %d\n", l_p[(3 - j + 0) % 3], l_p[(3 - j + 1) % 3], l_p[(3 - j + 2) % 3]);
+        // printf("2: %d %d %d\n", l_p1[(3 - j + 0) % 3], l_p1[(3 - j + 1) % 3], l_p1[(3 - j + 2) % 3]);
+        // printf("3: %d %d %d\n", l_p2[(3 - j + 0) % 3], l_p2[(3 - j + 1) % 3], l_p2[(3 - j + 2) % 3]);}
+        UH[idM + 0 * offset] = 0.5 * (UH[idM_n1 + 0 * offset] + UH[idM_n2 + 0 * offset]);
+        UH[idM + 1 * offset] = 0.5 * (UH[idM_n1 + 1 * offset] + UH[idM_n2 + 1 * offset]);
+        UH[idM + 2 * offset] = 0.5 * (UH[idM_n1 + 2 * offset] + UH[idM_n2 + 2 * offset]);
+
+    }
+
+} } }
+
+// now doing the corners:
+int list_n[2] = {1, -1};
+for (int i = 0; i < 2; i++)
+{
+    for (int j = 0; j < 2; j++)
+    {
+        for (int k = 0; k < 2; k++)
+        {
+            if (coupling_cmap[e * 8 + 4 * i + 2 * j + k]) {
+
+                const dlong idM    = e * p_Np + (k * (p_Nq - 1)) * p_Nq * p_Nq + (j * (p_Nq - 1)) * p_Nq + (i * (p_Nq - 1));
+                const dlong idM_n1 = e * p_Np + (k * (p_Nq - 1)) * p_Nq * p_Nq + (j * (p_Nq - 1)) * p_Nq + (i * (p_Nq - 1) + list_n[i]);
+                const dlong idM_n2 = e * p_Np + (k * (p_Nq - 1)) * p_Nq * p_Nq + (j * (p_Nq - 1) + list_n[j]) * p_Nq + (i * (p_Nq - 1));
+                const dlong idM_n3 = e * p_Np + (k * (p_Nq - 1) + list_n[k]) * p_Nq * p_Nq + (j * (p_Nq - 1)) * p_Nq + (i * (p_Nq - 1));  
+                
+                UH[idM + 0 * offset] = (1./3.) * (UH[idM_n1 + 0 * offset] + UH[idM_n2 + 0 * offset] + UH[idM_n3 + 0 * offset]);
+                UH[idM + 1 * offset] = (1./3.) * (UH[idM_n1 + 1 * offset] + UH[idM_n2 + 1 * offset] + UH[idM_n3 + 1 * offset]);
+                UH[idM + 2 * offset] = (1./3.) * (UH[idM_n1 + 2 * offset] + UH[idM_n2 + 2 * offset] + UH[idM_n3 + 2 * offset]);
+            }
+        }
+        
+    }
+    
+}
+
 
 for (int f = 0; f < p_Nfaces; f++) {
 for (int m = 0; m < p_Nfp; ++m; @inner(0)) {
