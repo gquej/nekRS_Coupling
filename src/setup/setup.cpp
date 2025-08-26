@@ -478,12 +478,12 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
 
   nrs->coupling_bbox = new double[6];
-  nrs->coupling_bbox[0] = 0.25;
-  nrs->coupling_bbox[1] = 0.75;
-  nrs->coupling_bbox[2] = 0.25;
-  nrs->coupling_bbox[3] = 0.75;
-  nrs->coupling_bbox[4] = 0.25;
-  nrs->coupling_bbox[5] = 0.75;
+  nrs->coupling_bbox[0] = 1.;
+  nrs->coupling_bbox[1] = 7.;
+  nrs->coupling_bbox[2] = 1.;
+  nrs->coupling_bbox[3] = 7.;
+  nrs->coupling_bbox[4] = 0.;
+  nrs->coupling_bbox[5] = 1.;
   precice::string_view mesh_name = "Nek-Mesh";
   precice::string_view direct_mesh_name = "Murphy-Mesh";
   precice::string_view data_name = "Murphy_u";
@@ -511,7 +511,7 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
     for (int f = 0; f < p_Nfaces; f++) {
       const dlong bcType = nrs->EToB[f + p_Nfaces * e];
       if (bcType == 3) {
-        boundary_points_counter += p_Nfp;
+        boundary_points_counter += p_Nfp * 2; //factor 2 is to count also the interior layer of points when imposing omega on the second spectral point
       }
     }
   }
@@ -542,8 +542,21 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
           vertices_temp[3 * total_count+ 0]  = nek_x[idM];
           vertices_temp[3 * total_count + 1] = nek_y[idM];
           vertices_temp[3 * total_count + 2] = nek_z[idM];
-          counter_to_idM[total_count] = sk;
+          counter_to_idM[total_count] = idM;
           total_count ++;
+          if( 1== 1) {  // also send the second layer of points as nek vertices
+            const dlong idM_el = idM - e * p_Np ;               // equivalent to k * p_Nq * p_Nq + j * p_Nq + i
+            const dlong remainder = idM_el % (p_Nq * p_Nq);            
+            const int idz = idM_el/(p_Nq * p_Nq);             //volumic z (k) index within this element 
+            const int idy = remainder / p_Nq;                 //volumic y (j) index within this element 
+            const int idx = remainder % p_Nq;  
+            const dlong idM_local = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + idx - 1;
+            vertices_temp[3 * total_count+ 0]  = nek_x[idM_local];
+            vertices_temp[3 * total_count + 1] = nek_y[idM_local];
+            vertices_temp[3 * total_count + 2] = nek_z[idM_local];
+            counter_to_idM[total_count] = idM_local;
+            total_count ++;
+          }
         }
       }
     }
@@ -555,7 +568,7 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   double tol = 1.e-10;
   for (int i = 0; i < boundary_points_counter; i++)
   {
-    const dlong idM = ((mesh->vmapM))[counter_to_idM[i]];
+    const dlong idM = counter_to_idM[i];
     int is_unique = 1;
     for (int j = 0; j < unique_count; j++)
     {
@@ -577,64 +590,6 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
       unique_count ++;
     }
   }
-  //identify the element edges that are edges of the global domain
-  nrs->coupling_emap = (dlong*) calloc(N_elements * 12, sizeof(dlong));
-  nrs->coupling_cmap = (dlong*) calloc(N_elements * 8, sizeof(dlong));
-  double *bb = nrs->coupling_bbox;
-  double x, y, z;
-  int idM;
-  int list_idx[4] = {0, 0   , 0   , 0   };//, 0, 0, p_Nq, p_Nq, 0, p_Nq, p_Nq, 0};
-  int list_idy[4] = {0, p_Nq - 1, p_Nq - 1, 0   };//, 0, 0, 0, 0, 0, 0, p_Nq, p_Nq};
-  int list_idz[4] = {0, 0   , p_Nq - 1, p_Nq - 1};//, 0, p_Nq, p_Nq, 0, 0, 0, 0, 0};
-  int * list_list_id[3] = {list_idx, list_idy, list_idz};
-  double * list_nek[3] = {nek_x, nek_y, nek_z};
-
-  double list_bby[12] = {bb[2], bb[3], bb[3], bb[2], bb[4], bb[5], bb[5], bb[4], bb[0], bb[1], bb[1], bb[0]};
-  double list_bbz[12] = {bb[4], bb[4], bb[5], bb[5], bb[0], bb[0], bb[1], bb[1], bb[2], bb[2], bb[3], bb[3]};
-  for (dlong e = 0; e < N_elements; e++) {
-    for (dlong j = 0; j < 3; ++j) {
-
-      for (dlong i = 0; i < 4; i++) {
-        idM = e * p_Np + list_list_id[(3 - j + 2) % 3][i] * p_Nq * p_Nq + list_list_id[(3 - j + 1) % 3][i] * p_Nq + list_list_id[(3 - j + 0) % 3][i];
-        x = list_nek[(j + 0) % 3][idM];
-        y = list_nek[(j + 1) % 3][idM];
-        z = list_nek[(j + 2) % 3][idM];
-        if ((abs(y - list_bby[i + 4 * j]) < tol) && (abs(z - list_bbz[i + 4 * j]) < tol)) {
-          nrs->coupling_emap[e * 12 + 4 * j + i] = 1;
-        }
-        if (e == 0 && 0) {
-          printf ("\n i: %d , j: %d\n", i, j);
-          printf("%d %d %d\n", (3 -j + 2) % 3, (3 -j + 1) % 3, (3 -j + 0) % 3);
-          printf("idz: %d, idy: %d, idx: %d\n",list_list_id[(3 - j + 2) % 3][i],list_list_id[(3 - j + 1) % 3][i],  list_list_id[(3 - j + 0) % 3][i]);
-          printf("x: %f, y: %f, z: %f\n", x, y , z);
-          printf("bby: %f, bbz: %f\n",list_bby[i + 4 * j],list_bbz[i + 4 * j] );
-          printf("result: %d\n",nrs->coupling_emap[e * 12 + 4 * j + i + 1] );
-        }
-      }
-    }    
-
-    //now check for the corners
-    for (int i = 0; i < 2; i++)
-    {
-      for (int j = 0; j < 2; j++)
-      {
-        for (int k = 0; k < 2; k++)
-        {
-          idM = e * p_Np + (k * (p_Nq - 1)) * p_Nq * p_Nq + (j * (p_Nq - 1)) * p_Nq + (i * (p_Nq - 1));
-          x = nek_x[idM];
-          y = nek_y[idM];
-          z = nek_z[idM];
-          if ((abs(x - bb[0 + i]) < tol) && (abs(y - bb[2 + j]) < tol) && (abs(z - bb[4 + k]) < tol)) {
-            nrs->coupling_cmap[e * 8 + i * 4 + j * 2 + k] = 1;
-            printf("found global domain corner, e %d, x %f y %f z %f\n", e, x, y, z);
-          }
-        }
-        
-      }
-      
-    }
-        
-  }
 
   coupling->Set_vertices(vertices_temp, unique_count);
 
@@ -649,16 +604,27 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   nrs->o_coupling_vmap = platform->device.malloc(mesh->Nelements * mesh->Np * sizeof(dlong), nrs->coupling_vmap);
   nrs->o_coupling_vmap.copyFrom(nrs->coupling_vmap);
 
-  nrs->o_coupling_emap = platform->device.malloc(N_elements * 12 * sizeof(dlong), nrs->coupling_emap);
-  nrs->o_coupling_emap.copyFrom(nrs->coupling_emap);
-
-  nrs->o_coupling_cmap = platform->device.malloc(N_elements * 8 * sizeof(dlong), nrs->coupling_cmap);
-  nrs->o_coupling_cmap.copyFrom(nrs->coupling_cmap);
-
   nrs->o_coupling_bbox = platform->device.malloc(6 * sizeof(dlong), nrs->coupling_bbox);
   nrs->o_coupling_bbox.copyFrom(nrs->coupling_bbox);
   coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name);
   
+  //setting up the interpolator
+
+  const int np = coupling->direct_mesh_size();
+  const auto offset = np;
+  nrs->interpolator = new pointInterpolation_t(nrs);
+  nrs->o_fields1D = platform->device.malloc(3 * offset * sizeof(dfloat));
+  std::vector<dfloat> xp, yp, zp;
+  
+  const std::vector<dfloat> *vertices = coupling->direct_vertices();
+
+  for (int i = 0; i < np; i++) {
+    xp.push_back((*vertices)[3 * i + 0]);
+    yp.push_back((*vertices)[3 * i + 1]);
+    zp.push_back((*vertices)[3 * i + 2]);
+  }
+  nrs->interpolator->setPoints(np, xp.data(), yp.data(), zp.data());
+  nrs->interpolator->find();
   //-----------------------------------------------------------------------------------------------------------------------------------
 
 

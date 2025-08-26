@@ -55,7 +55,7 @@ class Coupling {
         void Write();
         void Advance(double dt) {precice_->advance(dt);};
         void Finalize() {precice_->finalize();};
-        double GetTimeStep(double dt);
+        double GetMaxTimeStep() {return precice_->getMaxTimeStepSize();};
 
         double * Get_data1() {return Data1_.data();};
         double * Get_data2() {return Data2_.data();};

@@ -58,7 +58,3 @@ void Coupling::Read(double dt) {
 void Coupling::Write() {    
     precice_->writeData(direct_mesh_name_, direct_data_name_, direct_vertex_IDs_, direct_data_);
 }
-
-double Coupling::GetTimeStep(double dt) {
-    return std::min(precice_->getMaxTimeStepSize(), dt);
-}

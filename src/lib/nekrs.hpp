@@ -50,7 +50,7 @@ bool stepConverged();
 void couplingRead (double dt);
 void couplingWrite();
 void couplingAdvance(double dt);
-double couplingTimeStep(double dt);
+double couplingMaxTimeStep();
 
 }
 

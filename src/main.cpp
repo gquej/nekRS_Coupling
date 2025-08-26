@@ -538,7 +538,9 @@ int main(int argc, char** argv)
     nekrs::outputStep(outputStep);
 
     if (tStep <= 1000) nekrs::verboseInfo(true); 
-    dt = nekrs::couplingTimeStep(dt);
+    const double coupling_max_dt = nekrs::couplingMaxTimeStep();
+    const double dt_solver = dt;
+    dt = std::min(coupling_max_dt, dt_solver);
 
     nekrs::initStep(time, dt, tStep);
 
@@ -553,8 +555,7 @@ int main(int argc, char** argv)
  
     time = nekrs::finishStep();
 
-    nekrs::couplingWrite();
-    nekrs::couplingAdvance(dt);
+    
 
     if(nekrs::updateFileCheckFreq()) {
       if(tStep % nekrs::updateFileCheckFreq()) 
@@ -592,6 +593,12 @@ int main(int argc, char** argv)
     }
 
     if (tStep % 100 == 0) fflush(stdout);
+
+    double tol_dt = 1.e-10;
+    if (abs(dt_solver - coupling_max_dt) < tol_dt) {
+      nekrs::couplingWrite();
+    }
+    nekrs::couplingAdvance(dt);
   }
   MPI_Pcontrol(0);
 
