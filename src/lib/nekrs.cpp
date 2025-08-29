@@ -555,6 +555,16 @@ void couplingAdvance(double dt) { nrs->coupling->Advance(dt); }
 
 double couplingMaxTimeStep() { return nrs->coupling->GetMaxTimeStep(); }
 
+double coupling_dt(double * coupling_max_dt, double * dt_solver) {
+  *coupling_max_dt =  nekrs::couplingMaxTimeStep();
+  double constant_dt;
+  platform->options.getArgs("DT", constant_dt);
+  *dt_solver = constant_dt;
+  nrs->dt[0] = std::min(*coupling_max_dt, *dt_solver);
+  return nrs->dt[0];
+
+}
+
 
 } // namespace nekrs
 

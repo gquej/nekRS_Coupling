@@ -538,9 +538,9 @@ int main(int argc, char** argv)
     nekrs::outputStep(outputStep);
 
     if (tStep <= 1000) nekrs::verboseInfo(true); 
-    const double coupling_max_dt = nekrs::couplingMaxTimeStep();
-    const double dt_solver = dt;
-    dt = std::min(coupling_max_dt, dt_solver);
+    double coupling_max_dt;
+    double dt_solver;
+    dt = nekrs::coupling_dt(&coupling_max_dt, &dt_solver);
 
     nekrs::initStep(time, dt, tStep);
 
