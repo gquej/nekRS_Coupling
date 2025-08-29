@@ -477,27 +477,71 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   std::string_view solver_name = "Nek";
   std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
 
-  nrs->coupling_bbox = new double[6];
-  nrs->coupling_bbox[0] = 1.;
-  nrs->coupling_bbox[1] = 7.;
-  nrs->coupling_bbox[2] = 1.;
-  nrs->coupling_bbox[3] = 7.;
-  nrs->coupling_bbox[4] = 0.;
-  nrs->coupling_bbox[5] = 1.;
-  precice::string_view mesh_name = "Nek-Mesh";
-  precice::string_view direct_mesh_name = "Murphy-Mesh";
-  precice::string_view data_name = "Murphy_u";
-  precice::string_view data2_name = "Murphy_w";
-  precice::string_view direct_data_name = "Nek_u";
 
-  nrs->coupling = new Coupling(solver_name, config_file);
-  Coupling * coupling = nrs->coupling;
-
+  //new way to find the bounding box:
   int p_Nfaces = mesh->Nfaces;
   int p_Nfp = mesh->Nfp;
   int p_Np = mesh->Np;
   int p_Nq = mesh->Nq;
   int N_elements = mesh->Nelements;
+
+  double * nek_x = mesh->x;
+  double * nek_y = mesh->y;
+  double * nek_z = mesh->z;
+  double tol_bb = 1e-4;
+  dfloat bbx1 = 1e30;
+  dfloat bbx2 = -1e30;
+  dfloat bby1 = 1e30;
+  dfloat bby2 = -1e30;
+  dfloat bbz1 = 1e30;
+  dfloat bbz2 = -1e30;
+  for (dlong e = 0; e < N_elements; e ++) {
+    for (int k = 0; k < p_Nq; ++k) {
+      for (int j = 0; j < p_Nq; ++j) {
+        for (int i = 0; i < p_Nq; ++i) {
+          const dlong id = e * p_Np + k * p_Nq * p_Nq + j * p_Nq + i;
+          if (nek_x[id] < bbx1) {
+            bbx1 = nek_x[id];
+          }
+          if (nek_x[id] > bbx2) {
+            bbx2 = nek_x[id];
+          }
+          if (nek_y[id] < bby1) {
+            bby1 = nek_y[id];
+          }
+          if (nek_y[id] > bby2) {
+            bby2 = nek_y[id];
+          }
+          if (nek_z[id] < bbz1) {
+            bbz1 = nek_z[id];
+          }
+          if (nek_z[id] > bbz2) {
+            bbz2 = nek_z[id];
+          }
+        }
+      }
+    }
+  }
+
+  nrs->coupling_bbox = new double[6];
+  nrs->coupling_bbox[0] = bbx1 - tol_bb;
+  nrs->coupling_bbox[1] = bbx2 + tol_bb;
+  nrs->coupling_bbox[2] = bby1 - tol_bb;
+  nrs->coupling_bbox[3] = bby2 + tol_bb;
+  nrs->coupling_bbox[4] = bbz1 - tol_bb;
+  nrs->coupling_bbox[5] = bbz2 + tol_bb;
+  printf("\n\n\n %f %f %f %f %f %f \n", bbx1,bbx2,bby1,bby2,bbz1,bbz2);
+
+  precice::string_view mesh_name = "Nek-Mesh";
+  precice::string_view direct_mesh_name = "Murphy-Mesh";
+  precice::string_view data_name = "Murphy_u";
+  precice::string_view data2_name = "Murphy_w";
+  precice::string_view direct_data_name = "Nek_u";
+  precice::string_view direct_data_name_cum = "Nek_cum";
+
+  nrs->coupling = new Coupling(solver_name, config_file);
+  Coupling * coupling = nrs->coupling;
+
   int boundary_points_counter = 0;
 
   nrs->coupling_vmap = (dlong *)calloc(mesh->Nelements * mesh->Np, sizeof(dlong)); //mapping from volumic indices to precice buffer (i.e., a lot of these are empty since a lot of nodes are not at a boundary)
@@ -524,9 +568,6 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   // int temp_mapping[boundary_points_counter];
 
   //filling vertices_temp with all the outer vertices (including the doubles!!)
-  double * nek_x = mesh->x;
-  double * nek_y = mesh->y;
-  double * nek_z = mesh->z;
 
   int total_count = 0;
 
@@ -606,7 +647,7 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
 
   nrs->o_coupling_bbox = platform->device.malloc(6 * sizeof(dlong), nrs->coupling_bbox);
   nrs->o_coupling_bbox.copyFrom(nrs->coupling_bbox);
-  coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name);
+  coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name, direct_data_name_cum);
   
   //setting up the interpolator
 

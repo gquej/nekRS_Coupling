@@ -540,10 +540,12 @@ void couplingWrite() {
   std::vector<dfloat> U_eval(Nfields * np);
   nrs->o_fields1D.copyTo(U_eval.data());
   std::vector<double> * direct_data = nrs->coupling->direct_data();
+  std::vector<double> * direct_data_cum = nrs->coupling->direct_data_cum();
   for (int i = 0; i < np; i++) {
     (*direct_data)[3 * i + 0] = U_eval[i + 0 * offset];
     (*direct_data)[3 * i + 1] = U_eval[i + 1 * offset];
     (*direct_data)[3 * i + 2] = U_eval[i + 2 * offset];
+    (*direct_data_cum)[i] = 1.;
   }
 
   nrs->coupling->Write();
