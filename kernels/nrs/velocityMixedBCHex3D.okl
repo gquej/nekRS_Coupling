@@ -187,23 +187,9 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     const dfloat vsol = (-a*ff*t + a*i*s + c*d*t - c*g*s - d*i*r + ff*g*r) / DD;
     const dfloat wsol = (a*ee*t - a*h*s - b*d*t + b*g*s + d*h*r -ee*g*r) /DD;
 
-    if (!(e >= 581 && ((e+1)%6==0) && m >= 20)) {
-        UH[idM + 0 * offset] = usol;
-        UH[idM + 1 * offset] = vsol;
-        UH[idM + 2 * offset] = wsol;
-    }
-    if(e < 288 && ((e+1)%6==0) && m < 5){
-        int e_b = e + 576; 
-        int m_b = m + 20; 
-        int n_b = m_b + f * p_Nfp;
-        int sk_b = e_b * p_Nfp * p_Nfaces + n_b;
-        dlong idM_b = vmapM[sk_b];
-
-        UH[idM_b + 0 * offset] = UH[idM + 0 * offset];
-        UH[idM_b + 1 * offset] = UH[idM + 1 * offset];
-        UH[idM_b + 2 * offset] = UH[idM + 2 * offset];
-
-    }
+    UH[idM + 0 * offset] = usol;
+    UH[idM + 1 * offset] = vsol;
+    UH[idM + 2 * offset] = wsol;
 
     //2D version
     // D21 = D[(p_Nq - 1) * p_Nq + p_Nq - 1];

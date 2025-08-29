@@ -532,6 +532,10 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
   nrs->coupling_bbox[5] = bbz2 + tol_bb;
   printf("\n\n\n %f %f %f %f %f %f \n", bbx1,bbx2,bby1,bby2,bbz1,bbz2);
 
+  bool periodic = true;
+  dfloat per_1 = 0.;
+  dfloat per_2 = 1.;
+
   precice::string_view mesh_name = "Nek-Mesh";
   precice::string_view direct_mesh_name = "Murphy-Mesh";
   precice::string_view data_name = "Murphy_u";
@@ -582,7 +586,11 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
           // temp_mapping[sk] = idM;
           vertices_temp[3 * total_count+ 0]  = nek_x[idM];
           vertices_temp[3 * total_count + 1] = nek_y[idM];
-          vertices_temp[3 * total_count + 2] = nek_z[idM];
+          if (periodic && abs(nek_z[idM] - per_2) < 1e-8) {
+            vertices_temp[3 * total_count + 2] = per_1;
+          } else {
+            vertices_temp[3 * total_count + 2] = nek_z[idM];
+          }
           counter_to_idM[total_count] = idM;
           total_count ++;
           if( 1== 1) {  // also send the second layer of points as nek vertices
@@ -594,7 +602,11 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
             const dlong idM_local = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + idx - 1;
             vertices_temp[3 * total_count+ 0]  = nek_x[idM_local];
             vertices_temp[3 * total_count + 1] = nek_y[idM_local];
-            vertices_temp[3 * total_count + 2] = nek_z[idM_local];
+            if (periodic && abs(nek_z[idM_local] - per_2) < 1e-8) {
+              vertices_temp[3 * total_count + 2] = per_1;
+            } else {
+              vertices_temp[3 * total_count + 2] = nek_z[idM_local];
+            }
             counter_to_idM[total_count] = idM_local;
             total_count ++;
           }
