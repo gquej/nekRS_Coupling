@@ -518,6 +518,10 @@ int main(int argc, char** argv)
 
   fflush(stdout);
   MPI_Pcontrol(1);
+
+  //coupling Setup
+  nekrs::nrsCouplingSetup();
+  
   while (!isLastStep) {
     MPI_Barrier(comm);
     const double timeStartStep = MPI_Wtime();
@@ -540,8 +544,7 @@ int main(int argc, char** argv)
     if (tStep <= 1000) nekrs::verboseInfo(true); 
     double coupling_max_dt;
     double dt_solver;
-    dt = nekrs::coupling_dt(&coupling_max_dt, &dt_solver);
-
+    dt = nekrs::coupling_dt(&coupling_max_dt, &dt_solver, tStep);
     nekrs::initStep(time, dt, tStep);
 
     //Coupling: reading the murphy velocity and vorticity

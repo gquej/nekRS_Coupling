@@ -51,8 +51,8 @@ void couplingRead (double dt);
 void couplingWrite();
 void couplingAdvance(double dt);
 double couplingMaxTimeStep();
-double coupling_dt(double * coupling_max_dt, double * dt_solver);
-
+double coupling_dt(double * coupling_max_dt, double * dt_solver, int tStep);
+void nrsCouplingSetup();
 }
 
 #endif

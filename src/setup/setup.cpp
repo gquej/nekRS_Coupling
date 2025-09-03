@@ -684,8 +684,6 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
 
     nrs->o_filterMT = hpfSetup(nrs->meshV, nrs->filterNc);
   }
-  //setup the coupling stuff
-  couplingSetup(nrs);
 
 
   // build kernels

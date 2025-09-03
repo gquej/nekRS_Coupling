@@ -220,7 +220,9 @@ void setup(MPI_Comm commg_in,
 
   initialized = true;
 }
-
+void nrsCouplingSetup() {
+  couplingSetup(nrs);
+}
 void copyFromNek(double time, int tstep) { nek::ocopyToNek(time, tstep); }
 
 void udfExecuteStep(double time, int tstep, int isOutputStep)
@@ -555,12 +557,21 @@ void couplingAdvance(double dt) { nrs->coupling->Advance(dt); }
 
 double couplingMaxTimeStep() { return nrs->coupling->GetMaxTimeStep(); }
 
-double coupling_dt(double * coupling_max_dt, double * dt_solver) {
+double coupling_dt(double * coupling_max_dt, double * dt_solver, int tStep) {
   *coupling_max_dt =  nekrs::couplingMaxTimeStep();
   double constant_dt;
   platform->options.getArgs("DT", constant_dt);
+  if (tStep < 6) {
+    constant_dt /= 100000.;
+  }
+  if (tStep == 6) {
+    nrs->dt[0] = constant_dt;
+    nrs->dt[1] = constant_dt;
+    nrs->dt[2] = constant_dt;
+  }
   *dt_solver = constant_dt;
   nrs->dt[0] = std::min(*coupling_max_dt, *dt_solver);
+  printf("This is the dt historic: %f %f %f\n", nrs->dt[0], nrs->dt[1],nrs->dt[2]);
   return nrs->dt[0];
 
 }

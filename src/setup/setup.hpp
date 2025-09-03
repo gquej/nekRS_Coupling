@@ -5,5 +5,5 @@
 #include <precice/precice.hpp>
 
 void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs);
-
+void couplingSetup(nrs_t *nrs);
 #endif
