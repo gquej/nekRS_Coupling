@@ -70,7 +70,7 @@ class Coupling {
         vector_t *direct_data_cum() {return &direct_data_cum_;};
         vector<int> *mapping() {return &mapping_;};
 
-        ~Coupling() {}
+        ~Coupling() {Finalize();}
 
 };
 
