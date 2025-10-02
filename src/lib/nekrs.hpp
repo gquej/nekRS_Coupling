@@ -52,7 +52,7 @@ void couplingWrite();
 void couplingAdvance(double dt);
 double couplingMaxTimeStep();
 double coupling_dt(double * coupling_max_dt, double * dt_solver, int tStep);
-void couplingSetup();
+void couplingSetup(std::string_view config_file);
 void couplingFinalize();
 }
 

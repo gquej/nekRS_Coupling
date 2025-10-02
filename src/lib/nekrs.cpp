@@ -222,11 +222,10 @@ void setup(MPI_Comm commg_in,
 
   initialized = true;
 }
-void couplingSetup() {
+void couplingSetup(std::string_view config_file) {
   mesh_t *mesh = nrs->meshV;
   //setup the coupling stuff
   std::string_view solver_name = "Nek";
-  std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
 
 
   //new way to find the bounding box:

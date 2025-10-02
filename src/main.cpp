@@ -520,8 +520,47 @@ int main(int argc, char** argv)
   MPI_Pcontrol(1);
 
   //coupling Setup
-  nekrs::nrsCouplingSetup();
-  
+  //
+  // CODE COMMENTED BELOW: TRYING TO DO SOME TIME STEPS BEFORE  
+  // std::string_view config_file = "../../../../Coupling_dir/precice-config-presim.xml";
+  // nekrs::couplingSetup(config_file);
+  // /////////////////////////////////////////////////////////////////////////////////////
+  // for (int pstep = 1; pstep < 6; ++pstep) {
+  //   double dt, dt_solver,coupling_max_dt;
+  //   MPI_Barrier(comm);
+  //   dt = 0.015/100000.;
+  //   ++tStep;
+  //   nekrs::initStep(time, dt, tStep);
+
+  //   printf("iter %d %d \n", tStep, pstep);
+
+  //   nekrs::couplingRead(dt);
+
+  //   int corrector = 1;
+  //   bool converged = false;
+  //   do {
+  //     converged = nekrs::runStep(corrector++);
+  //   } while (!converged);
+ 
+  //   time = nekrs::finishStep();
+  //   if (nekrs::printInfoFreq()) {
+  //     if (tStep % nekrs::printInfoFreq() == 0)
+  //       nekrs::printInfo(time, tStep, false, true);
+  //   }
+  //   MPI_Barrier(comm);
+
+  //   double tol_dt = 1.e-10;
+  //   if (abs(dt_solver - coupling_max_dt) < tol_dt) {
+  //     nekrs::couplingWrite();
+  //   }
+  //   nekrs::couplingAdvance(dt);
+
+  // }
+
+  // nekrs::couplingFinalize();
+  // config_file = "../../../../Coupling_dir/precice-config.xml";
+  // nekrs::couplingSetup(config_file);
+////////////////////////////////////////////////////////////////////////////////////
   while (!isLastStep) {
     MPI_Barrier(comm);
     const double timeStartStep = MPI_Wtime();
