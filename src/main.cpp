@@ -558,8 +558,8 @@ int main(int argc, char** argv)
   // }
 
   // nekrs::couplingFinalize();
-  // config_file = "../../../../Coupling_dir/precice-config.xml";
-  // nekrs::couplingSetup(config_file);
+  std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
+  nekrs::couplingSetup(config_file);
 ////////////////////////////////////////////////////////////////////////////////////
   while (!isLastStep) {
     MPI_Barrier(comm);
