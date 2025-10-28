@@ -24,6 +24,14 @@
 
  */
 
+ // this is the face ordering:
+//      x-: 4
+//      x+: 2
+//      y-: 1
+//      y+: 3
+//      z-: 0
+//      z+: 5
+
  @kernel void velocityMixedBCHex3D(const dlong Nelements,
     const dlong offset,
     const dfloat time,
@@ -52,9 +60,25 @@
     @ restrict const dlong *bounding_box,
     const dlong tstep)
 {
+//The following arrays contain the necessry info to treat each face 
+int list_ind_beg[6] = {1, 1, 0, 0, 1, 0}; //beginning index to compute the derivative in the normal direction
+int list_ind_end[6] = {p_Nq, p_Nq, p_Nq - 1, p_Nq - 1, p_Nq, p_Nq - 1};//end index to compute the derivative in the normal direction
+int list_ind_der[6] = {1, 1, p_Nq - 2, p_Nq - 2, 1, p_Nq - 2}; //index in the normal direction where the derivatives are discretized
+int list_ind_unk[6] = {0, 0, p_Nq - 1, p_Nq - 1, 0, p_Nq - 1}; //index in the normal direction where the velocity values are unknown
+int list_off[6] = {2,1,0,1,0,2}; //offset: x = 0, y = 1, z = 2
+int list_off_second[6][3] = {{0,0,1}, {0,1,0}, {-1,0,0}, {0,-1,0}, {1,0,0}, {0,0,-1}}; // for each face, what is the offset we must apply on the idx/idy/idz indices to have the first interior point
+int list_off_sec[6] = {1,1,-1,-1,1,-1}; //same as list_off_second but only the non-zero info
+double du[9]; // local velocity gradient, stored as [ur,us,ut,vr,vs,vt,wr,ws,wt]
+
 
 for (dlong e = 0; e < Nelements; e++; @outer(0)) {
 for (int f = 0; f < p_Nfaces; f++) {
+
+int ind_beg   = list_ind_beg[f];
+int ind_end   = list_ind_end[f];
+int off = list_off[f];
+int off_sec = list_off_sec[f];
+
 for (int m = 0; m < p_Nfp; ++m; @inner(0)) {
 
 const int n = m + f * p_Nfp;
@@ -65,30 +89,41 @@ const dlong bcType = EToB[f + p_Nfaces * e];
 
 if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
 
+    //--------------------------------------------------------------------------------------------------------//
+    //----------------------------- Quantities relative to the first node of the SE --------------------------//
+
     const dlong idM_el = idM - e * p_Np ;               // equivalent to k * p_Nq * p_Nq + j * p_Nq + i
     const dlong remainder = idM_el % (p_Nq * p_Nq);            
     const int idz = idM_el/(p_Nq * p_Nq);             //volumic z (k) index within this element 
     const int idy = remainder / p_Nq;                 //volumic y (j) index within this element 
-    const int idx = remainder % p_Nq;      
+    const int idx = remainder % p_Nq;                 //volumic x (i) index within this element 
     const dlong gid = e * p_Np * p_Nvgeo + idM_el ;
 
-    const dfloat nx =sgeo[sid * p_Nsgeo + p_NXID];
-    const dfloat ny =sgeo[sid * p_Nsgeo + p_NYID];
-    const dfloat nz =sgeo[sid * p_Nsgeo + p_NZID];
+    //components of the normal and both tangential vectors
+    const dfloat nx  = sgeo[sid * p_Nsgeo + p_NXID];
+    const dfloat ny  = sgeo[sid * p_Nsgeo + p_NYID];
+    const dfloat nz  = sgeo[sid * p_Nsgeo + p_NZID];
 
-    const dfloat t1x =sgeo[sid * p_Nsgeo + p_T1XID];
-    const dfloat t1y =sgeo[sid * p_Nsgeo + p_T1YID];
-    const dfloat t1z =sgeo[sid * p_Nsgeo + p_T1ZID];
+    const dfloat t1x = sgeo[sid * p_Nsgeo + p_T1XID];
+    const dfloat t1y = sgeo[sid * p_Nsgeo + p_T1YID];
+    const dfloat t1z = sgeo[sid * p_Nsgeo + p_T1ZID];
 
-    const dfloat t2x =sgeo[sid * p_Nsgeo + p_T2XID];
-    const dfloat t2y =sgeo[sid * p_Nsgeo + p_T2YID];
-    const dfloat t2z =sgeo[sid * p_Nsgeo + p_T2ZID];
+    const dfloat t2x = sgeo[sid * p_Nsgeo + p_T2XID];
+    const dfloat t2y = sgeo[sid * p_Nsgeo + p_T2YID];
+    const dfloat t2z = sgeo[sid * p_Nsgeo + p_T2ZID];
 
-    const int mapping_ID = coupling_vmap[idM];
-    const dlong idM_dec = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + idx - 1; //dec stands for being 1 point inside the domain
-    const dlong idM_el_dec = idM_dec - e * p_Np ;               // equivalent to k * p_Nq * p_Nq + j * p_Nq + i    
+    //--------------------------------------------------------------------------------------------------------//
+    //----------------------------- Quantities relative to the second node of the SE ------------------------//
+
+    const int idx_dec = idx + list_off_second[f][0];  //dec stands for being 1 point inside the domain
+    const int idy_dec = idy + list_off_second[f][1];
+    const int idz_dec = idz + list_off_second[f][2];
+
+    const dlong idM_dec = e * p_Np + idz_dec * p_Nq * p_Nq + idy_dec * p_Nq + idx_dec ; 
+    const dlong idM_el_dec = idM_dec - e * p_Np ;
     const dlong gid_dec = e * p_Np * p_Nvgeo + idM_el_dec ;
 
+    // Element jacobian values evaluated at the first interor point
     const dfloat rx = vgeo[gid_dec + p_RXID * p_Np];
     const dfloat sx = vgeo[gid_dec + p_SXID * p_Np];
     const dfloat tx = vgeo[gid_dec + p_TXID * p_Np];
@@ -101,15 +136,46 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     const dfloat sz = vgeo[gid_dec + p_SZID * p_Np];
     const dfloat tz = vgeo[gid_dec + p_TZID * p_Np];
 
-    dfloat ur = 0.;
-    dfloat vr = 0.;
-    dfloat wr = 0.;
+    //reset the velocity derivatives to 0
+    for (int i = 0; i < 9; i++) du[i] = 0.;
 
-    for (int k = 0; k < p_Nq - 1; ++k) {
-        const dlong idM_local = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + k;
-        const dfloat Dr = D[(p_Nq - 2) * p_Nq + k];
+    //--------------------------------------------------------------------------------------------------------//
+    //--------------------------------- Compute the values of the derivatives -------------------------------//
+    // Below, the 3 loops to compute the derivatives of u,v,w in the 3 directions, r,s,t. This name of the variables corresponds to the case of a x face: the normal
+    // derivative is along r, and the tangential derivatives along s,t. We use permutations for the case of a y and a z face. For example, if we have a y face,
+    // the variable du/dr acctually corresponds to the derivative du/ds. If we have a z face, it corresponds to du/dt.
+    //
+    // The first loop computes the derivative in the normal direction. As a reminder, in the reference element, the derivative of a field  evaluated on the second 
+    // interior node is obtained as 
+    // 
+    //               du/dr(1,j,k) = U(0,j,k) D(1,0) + U(1,j,k) D(1,1) + ..... + U(p,j,k) D(1,p) + .... + U(N-1,j,k) D(1,N-1)
+
+    // In our case, the unknown is the value U(0,j,k), which belongs to the lhs of the system of equations. Thus, in the first loop, the value computed for du/dr is 
+    //
+    //            du[0] =    du/dr(1,j,k) - U(0,j,k) D(1,0)  = U(1,j,k) D(1,1) + ..... + U(p,j,k) D(1,p) + .... + U(N-1,j,k) D(1,N-1)
+    //
+    // Note that the velocity values used in the rhs of the above expression are extrapoled in time (stored in the Nek array "Ue").
+    //
+    //
+    // In the 2nd and 3rd loops, we compute the derivatives in the 2 tangential directions. For instance, for du/ds, we compute 
+    //
+    //            du[1] =    du/ds(1,j,k)  =  U(i,0,k) D(j,0) +  U(i,1,k) D(j,1) + ..... + U(i,p,k) D(j,p) + .... + U(i,p,k) D(j,p)
+    //
+    // The velocity values are those from VPM.
+
+    //--------------------------------------------------------------------------------------------------------//
+    // Derivatives in the r direction
+    for (int k = ind_beg; k < ind_end; ++k) {
+        int idx_loc = idx;
+        int idy_loc = idy;
+        int idz_loc = idz;
+        int *ids[3] = {&idx_loc, &idy_loc, &idz_loc};
+        *(ids[(0 + off ) % 3]) = k; // in this loop, the "r" index is replaced by k since we compute the derivative in the r direction
+
+        const dlong idM_local = e * p_Np + idz_loc * p_Nq * p_Nq + idy_loc * p_Nq + idx_loc;
+        const dfloat Dr = D[list_ind_der[f] * p_Nq + k];
         double upred,vpred,wpred;
-        if(tstep>2){
+        if(tstep>2){ // extrapolated values are only valid after 2 time steps for BDF2
             upred = Ue[idM_local + 0 * offset];
             vpred = Ue[idM_local + 1 * offset];
             wpred = Ue[idM_local + 2 * offset];
@@ -118,130 +184,107 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
             vpred = U[idM_local + 1 * offset];
             wpred = U[idM_local + 2 * offset];
         }
-        ur += Dr * upred;
-        vr += Dr * vpred;
-        wr += Dr * wpred;
+        du[0 + ((0 + off) % 3)] += Dr * upred;
+        du[3 + ((0 + off) % 3)] += Dr * vpred;
+        du[6 + ((0 + off) % 3)] += Dr * wpred;
     }
 
-    dfloat us = 0.;
-    dfloat vs = 0.;
-    dfloat ws = 0.;
+    //--------------------------------------------------------------------------------------------------------//
+    //Derivatives in the s direction
+    for (int k = 0; k < p_Nq; ++k) {
+        int idx_loc = idx;
+        int idy_loc = idy;
+        int idz_loc = idz;
+        int *ids[3] = {&idx_loc, &idy_loc, &idz_loc};
+        int id_der = *(ids[(1 + off) % 3]);
+        *(ids[(0 + off ) % 3]) += off_sec; //we compute the derivative on the first interior point (etiher + 1 or -1)
+        *(ids[(1 + off ) % 3]) = k;  // in this loop, the "s" index is replaced by k since we compute the derivative in the s direction
 
-    for (int k = 0; k < p_Nq ; ++k) {
-        const dlong idM_local = e * p_Np + idz * p_Nq * p_Nq + k * p_Nq + idx - 1;
-        const dfloat Ds = D[idy * p_Nq + k];
+        const dlong idM_local = e * p_Np + idz_loc * p_Nq * p_Nq + idy_loc * p_Nq + idx_loc;       
+        const dfloat Ds = D[id_der * p_Nq + k]; 
         double upred,vpred,wpred;
         dlong id_coupling = coupling_vmap[idM_local];
         upred = coupling_data1[3 * id_coupling + 0 ];
         vpred = coupling_data1[3 * id_coupling + 1 ];
         wpred = coupling_data1[3 * id_coupling + 2 ];
-        us += Ds * upred;
-        vs += Ds * vpred;
-        ws += Ds * wpred;
+
+        du[0 + ((1 + off) % 3)] += Ds * upred;
+        du[3 + ((1 + off) % 3)] += Ds * vpred;
+        du[6 + ((1 + off) % 3)] += Ds * wpred;
     }
 
-    dfloat ut = 0.;
-    dfloat vt = 0.;
-    dfloat wt = 0.;
+    //--------------------------------------------------------------------------------------------------------//
+    //Derivatives in the t direction
+    for (int k = 0; k < p_Nq; ++k) {
+        int idx_loc = idx;
+        int idy_loc = idy;
+        int idz_loc = idz;
+        int *ids[3] = {&idx_loc, &idy_loc, &idz_loc};
+        int id_der = *(ids[(2 + off) % 3]);
+        *(ids[(0 + off ) % 3]) += off_sec; //we compute the derivative on the first interior point (etiher + 1 or -1)
+        *(ids[(2 + off ) % 3]) = k; // in this loop, the "t" index is replaced by k since we compute the derivative in the t direction
 
-    for (int k = 0; k < p_Nq ; ++k) {
-        const dlong idM_local = e * p_Np + k * p_Nq * p_Nq + idy * p_Nq + idx - 1;
-        const dfloat Dt = D[idz * p_Nq + k];
+        const dlong idM_local = e * p_Np + idz_loc * p_Nq * p_Nq + idy_loc * p_Nq + idx_loc;
+        const dfloat Dt = D[id_der * p_Nq + k];
         double upred,vpred,wpred;
         dlong id_coupling = coupling_vmap[idM_local];
         upred = coupling_data1[3 * id_coupling + 0 ];
         vpred = coupling_data1[3 * id_coupling + 1 ];
         wpred = coupling_data1[3 * id_coupling + 2 ];
-        ut += Dt * upred;
-        vt += Dt * vpred;
-        wt += Dt * wpred;
+
+        du[0 + ((2 + off) % 3)] += Dt * upred;
+        du[3 + ((2 + off) % 3)] += Dt * vpred;
+        du[6 + ((2 + off) % 3)] += Dt * wpred;
     }
- 
-    const dfloat D21 = D[(p_Nq - 2) * p_Nq + p_Nq - 1];
-    const dfloat a = nx;
-    const dfloat b = ny;
-    const dfloat c = nz;
-    const dfloat d = (t1y*rz  - t1z*ry) * D21;
-    const dfloat ee = (-t1x*rz + t1z*rx) * D21;
-    const dfloat ff = (t1x*ry  - t1y*rx) * D21;
-    const dfloat g = (t2y*rz  - t2z*ry) * D21;
-    const dfloat h = (-t2x*rz + t2z*rx) * D21;
-    const dfloat i = (t2x*ry  - t2y*rx) * D21;
 
-    dlong idM_local = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + idx;
-    dlong id_coupling = coupling_vmap[idM_local];
-    double un_vpm = coupling_data1[3 * id_coupling + 0 ] * nx + coupling_data1[3 * id_coupling + 1 ] * ny + coupling_data1[3 * id_coupling + 2 ] * nz; 
-    idM_local = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + idx - 1;
-    id_coupling = coupling_vmap[idM_local];
-    const dfloat wt1_vpm = coupling_data2[3 * id_coupling + 0 ] * t1x + coupling_data2[3 * id_coupling + 1 ] * t1y + coupling_data2[3 * id_coupling + 2 ] * t1z; 
-    const dfloat wt2_vpm = coupling_data2[3 * id_coupling + 0 ] * t2x + coupling_data2[3 * id_coupling + 1 ] * t2y + coupling_data2[3 * id_coupling + 2 ] * t2z; 
-    const dfloat r = un_vpm;
-    const dfloat wx = ry*wr + sy*ws + ty*wt - rz*vr - sz*vs - tz*vt;
-    const dfloat wy = rz*ur + sz*us + tz*ut - rx*wr - sx*ws - tx*wt;
-    const dfloat wz = rx*vr + sx*vs + tx*vt - ry*ur - sy*us - ty*ut;
-    const dfloat s = wt1_vpm - t1x * wx - t1y * wy - t1z * wz;
-    const dfloat t = wt2_vpm - t2x * wx - t2y * wy - t2z * wz;
+    //--------------------------------------------------------------------------------------------------------//
+    //------------------------------------ Solving the 3x3 linear system ------------------------------------//
 
-    const dfloat DD = a*ee*i - a*ff*h - b*d*i + b*ff*g + c*d*h - c*ee*g; 
-    const dfloat usol = (b*ff*t-b*i*s-c*ee*t+c*h*s+ee*i*r-ff*h*r) / DD;
-    const dfloat vsol = (-a*ff*t + a*i*s + c*d*t - c*g*s - d*i*r + ff*g*r) / DD;
-    const dfloat wsol = (a*ee*t - a*h*s - b*d*t + b*g*s + d*h*r -ee*g*r) /DD;
+    //retrieve the normal velocity at the boundary points from the vpm value
+    dlong id_coupling = coupling_vmap[idM];
+    double un_vpm = coupling_data1[3 * id_coupling + 0 ] * nx + coupling_data1[3 * id_coupling + 1 ] * ny + coupling_data1[3 * id_coupling + 2 ] * nz;
+    //retrieve both tangential vorticity components at the first interior points, from the vpm value
+    id_coupling = coupling_vmap[idM_dec];
+    const dfloat wt1_vpm = coupling_data2[3 * id_coupling + 0 ] * t1x + coupling_data2[3 * id_coupling + 1 ] * t1y + coupling_data2[3 * id_coupling + 2 ] * t1z; //omega_t1
+    const dfloat wt2_vpm = coupling_data2[3 * id_coupling + 0 ] * t2x + coupling_data2[3 * id_coupling + 1 ] * t2y + coupling_data2[3 * id_coupling + 2 ] * t2z; //omega_t2
+
+    //vorticity values from the LHS of the system which do not contain unknows (this is not exactly the vorticty as the U1 * D21 (e.g.) is not included since it's an unknown!!)
+    const dfloat wx = ry*du[6] + sy*du[7] + ty*du[8] - rz*du[3] - sz*du[4] - tz*du[5];
+    const dfloat wy = rz*du[0] + sz*du[1] + tz*du[2] - rx*du[6] - sx*du[7] - tx*du[8];
+    const dfloat wz = rx*du[3] + sx*du[4] + tx*du[5] - ry*du[0] - sy*du[1] - ty*du[2];
+
+    // we solve the sytem MU = B, with U = [u,v,w]^T 
+    double M11, M12, M13, M21, M22, M23, M31, M32, M33; // 9 matrix components 
+    double B1, B2, B3; // 3 RHS components 
+    M11 = nx;
+    M12 = ny;
+    M13 = nz;
+    B1 = un_vpm;
+    B2 = wt1_vpm - t1x * wx - t1y * wy - t1z * wz;
+    B3 = wt2_vpm - t2x * wx - t2y * wy - t2z * wz;
+
+    const dfloat D21 = D[list_ind_der[f] * p_Nq + list_ind_unk[f]]; // weight of the first node in the normal derivative evaluated at the second node (multiplies the unknown)
+
+    double jac[3][3] = {{rx, ry, rz}, {sx, sy, sz}, {tx, ty, tz}};   
+    M21 = ( t1y * jac[0 + off][2] - t1z * jac[0 + off][1]) * D21;
+    M22 = (-t1x * jac[0 + off][2] + t1z * jac[0 + off][0]) * D21;
+    M23 = ( t1x * jac[0 + off][1] - t1y * jac[0 + off][0]) * D21;
+    M31 = ( t2y * jac[0 + off][2] - t2z * jac[0 + off][1]) * D21;
+    M32 = (-t2x * jac[0 + off][2] + t2z * jac[0 + off][0]) * D21;
+    M33 = ( t2x * jac[0 + off][1] - t2y * jac[0 + off][0]) * D21;  
+
+    //Solution computed as U = M^(-1) • B
+    const dfloat denom   =  M11*M22*M33 - M11*M23*M32 - M12*M21*M33 + M12*M23*M31+ M13*M21*M32 - M13*M22*M31; 
+    const dfloat usol = (  M12*M23*B3 - M12*M33*B2 - M13*M22*B3 + M13*M32*B2 + M22*M33*B1 - M23*M32*B1) / denom;
+    const dfloat vsol = (- M11*M23*B3 + M11*M33*B2 + M13*M21*B3 - M13*M31*B2 - M21*M33*B1 + M23*M31*B1) / denom;
+    const dfloat wsol = (  M11*M22*B3 - M11*M32*B2 - M12*M21*B3 + M12*M31*B2 + M21*M32*B1 - M22*M31*B1) / denom;
+
+    //--------------------------------------------------------------------------------------------------------//
+    //------------------------------------- Finally imposing the value --------------------------------------//
 
     UH[idM + 0 * offset] = usol;
     UH[idM + 1 * offset] = vsol;
     UH[idM + 2 * offset] = wsol;
-
-    //2D version
-    // D21 = D[(p_Nq - 1) * p_Nq + p_Nq - 1];
-    // a = nx;
-    // b = ny;
-    // c = -D21*ry;
-    // d = D21*rx ;
-    // ur = 0.;
-    // vr = 0.;
-
-    // for (int k = 0; k < p_Nq - 1; ++k) {
-    //     const dlong idM_local = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + k;
-    //     const dfloat Dr = D[(p_Nq - 1) * p_Nq + k];
-    //     double upred,vpred;
-    //     if(tstep>2){
-    //         upred = Ue[idM_local + 0 * offset];
-    //         vpred = Ue[idM_local + 1 * offset];
-
-    //     } else {
-    //         upred = U[idM_local + 0 * offset];
-    //         vpred = U[idM_local + 1 * offset];
-    //     }
-    //     ur += Dr * upred;
-    //     vr += Dr * vpred;
-    // }
-
-    // us = 0.;
-    // vs = 0.;
-
-    // for (int k = 0; k < p_Nq ; ++k) {
-    //     const dlong idM_local = e * p_Np + idz * p_Nq * p_Nq + k * p_Nq + idx ;
-    //     const dfloat Ds = D[idy * p_Nq + k];
-    //     double upred,vpred;
-
-    //     id_coupling = coupling_vmap[idM_local];
-    //     upred = coupling_data1[3 * id_coupling + 0 ];
-    //     vpred = coupling_data1[3 * id_coupling + 1 ];
-    //     us += Ds * upred;
-    //     vs += Ds * vpred;
-    // }
-    // idM_local = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + idx;
-    // id_coupling = coupling_vmap[idM_local];
-
-    // un_vpm = coupling_data1[3 * id_coupling + 0 ] * nx + coupling_data1[3 * id_coupling + 1 ] * ny;
-    // wt1_vpm = coupling_data2[3 * id_coupling + 2 ]; 
-
-    // r = un_vpm ;
-    // s = wt1_vpm - rx*vr - sx*vs + ry*ur + sy*us;
-
-    // usol = (d*r - b*s)/(a*d-b*c);
-    // vsol = (-c*r+a*s)/(a*d-b*c);
-    // wsol = 0.;
     
 }
 }
@@ -262,16 +305,6 @@ if (bcType == p_bcTypeW) {
 UH[idM + 0 * offset] = 0.0;
 UH[idM + 1 * offset] = 0.0;
 UH[idM + 2 * offset] = 0.0;
-// if(e == 72 && m < 11) {
-//     UH[idM + 0 * offset] = 0.4;
-//     UH[idM + 1 * offset] =  0.4;
-//     UH[idM + 2 * offset] =  0.4;
-// }
-// if (e == 648 && m> 15) {
-//     UH[idM + 0 * offset] = 0.4;
-//     UH[idM + 1 * offset] =  0.4;
-//     UH[idM + 2 * offset] =  0.4;
-// }
 }
 }
 }

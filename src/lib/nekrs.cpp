@@ -238,36 +238,21 @@ void couplingSetup(std::string_view config_file) {
   double * nek_x = mesh->x;
   double * nek_y = mesh->y;
   double * nek_z = mesh->z;
-  double tol_bb = 1e-4;
-  dfloat bbx1 = 1e30;
-  dfloat bbx2 = -1e30;
-  dfloat bby1 = 1e30;
-  dfloat bby2 = -1e30;
-  dfloat bbz1 = 1e30;
-  dfloat bbz2 = -1e30;
+  double tol_bb = 1e-4;            // this in an arbitrary tolerance, maybe should scale it with the problem dims
+  dfloat bbx1 = 1e30, bbx2 = -1e30;
+  dfloat bby1 = 1e30, bby2 = -1e30;
+  dfloat bbz1 = 1e30, bbz2 = -1e30;
   for (dlong e = 0; e < N_elements; e ++) {
     for (int k = 0; k < p_Nq; ++k) {
       for (int j = 0; j < p_Nq; ++j) {
         for (int i = 0; i < p_Nq; ++i) {
           const dlong id = e * p_Np + k * p_Nq * p_Nq + j * p_Nq + i;
-          if (nek_x[id] < bbx1) {
-            bbx1 = nek_x[id];
-          }
-          if (nek_x[id] > bbx2) {
-            bbx2 = nek_x[id];
-          }
-          if (nek_y[id] < bby1) {
-            bby1 = nek_y[id];
-          }
-          if (nek_y[id] > bby2) {
-            bby2 = nek_y[id];
-          }
-          if (nek_z[id] < bbz1) {
-            bbz1 = nek_z[id];
-          }
-          if (nek_z[id] > bbz2) {
-            bbz2 = nek_z[id];
-          }
+          if (nek_x[id] < bbx1) bbx1 = nek_x[id];
+          if (nek_x[id] > bbx2) bbx2 = nek_x[id];
+          if (nek_y[id] < bby1) bby1 = nek_y[id];
+          if (nek_y[id] > bby2) bby2 = nek_y[id];
+          if (nek_z[id] < bbz1) bbz1 = nek_z[id];
+          if (nek_z[id] > bbz2) bbz2 = nek_z[id];
         }
       }
     }
@@ -298,7 +283,7 @@ void couplingSetup(std::string_view config_file) {
 
   int boundary_points_counter = 0;
 
-  nrs->coupling_vmap = (dlong *)calloc(mesh->Nelements * mesh->Np, sizeof(dlong)); //mapping from volumic indices to precice buffer (i.e., a lot of these are empty since a lot of nodes are not at a boundary)
+  nrs->coupling_vmap = (dlong *) calloc(mesh->Nelements * mesh->Np, sizeof(dlong)); //mapping from volumic indices to precice buffer (i.e., a lot of these are empty since a lot of nodes are not at a boundary)
   for (int i = 0; i < mesh->Nelements * mesh->Np; i++)
   {
     nrs->coupling_vmap[i] = -1; //default: no mapping
@@ -336,7 +321,7 @@ void couplingSetup(std::string_view config_file) {
           // temp_mapping[sk] = idM;
           vertices_temp[3 * total_count+ 0]  = nek_x[idM];
           vertices_temp[3 * total_count + 1] = nek_y[idM];
-          if (periodic && abs(nek_z[idM] - per_2) < 1e-8) {
+          if (periodic && abs(nek_z[idM] - per_2) < 1e-8) {           //periodicity in z hardcoded here
             vertices_temp[3 * total_count + 2] = per_1;
           } else {
             vertices_temp[3 * total_count + 2] = nek_z[idM];
