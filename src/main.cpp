@@ -559,7 +559,21 @@ int main(int argc, char** argv)
 
   // nekrs::couplingFinalize();
   std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
-  nekrs::couplingSetup(config_file);
+  std::string_view solver_name = "Nek";
+  std::string_view mesh_name = "Nek-Mesh";
+  std::string_view direct_mesh_name = "Murphy-Mesh";
+  std::string_view data_name = "Murphy_u";
+  std::string_view data2_name = "Murphy_w";
+  std::string_view direct_data_name = "Nek_u";
+  std::string_view direct_data_name_cum = "Nek_cum";
+  bool periodic_dir[3] = {false, false, true};
+  double periodic_bounds[6] = {0., 0., 0., 0., 0., 1.};
+  double tol_bb = 1.e-4;
+
+  nekrs::couplingSetup(config_file, solver_name, mesh_name,
+                      direct_mesh_name, data_name, data2_name,
+                      direct_data_name, direct_data_name_cum, tol_bb,
+                      periodic_dir, periodic_bounds);
 ////////////////////////////////////////////////////////////////////////////////////
   while (!isLastStep) {
     MPI_Barrier(comm);

@@ -222,13 +222,12 @@ void setup(MPI_Comm commg_in,
 
   initialized = true;
 }
-void couplingSetup(std::string_view config_file) {
+void couplingSetup(std::string_view config_file,std::string_view solver_name,
+  std::string_view mesh_name, std::string_view direct_mesh_name,
+  std::string_view data_name, std::string_view data2_name,
+  std::string_view direct_data_name, std::string_view direct_data_name_cum,
+  double tol_bb, bool *periodic_dir, double * periodic_bounds) {
   mesh_t *mesh = nrs->meshV;
-  //setup the coupling stuff
-  std::string_view solver_name = "Nek";
-
-
-  //new way to find the bounding box:
   int p_Nfaces = mesh->Nfaces;
   int p_Nfp = mesh->Nfp;
   int p_Np = mesh->Np;
@@ -238,7 +237,6 @@ void couplingSetup(std::string_view config_file) {
   double * nek_x = mesh->x;
   double * nek_y = mesh->y;
   double * nek_z = mesh->z;
-  double tol_bb = 1e-4;            // this in an arbitrary tolerance, maybe should scale it with the problem dims
   dfloat bbx1 = 1e30, bbx2 = -1e30;
   dfloat bby1 = 1e30, bby2 = -1e30;
   dfloat bbz1 = 1e30, bbz2 = -1e30;
@@ -265,18 +263,6 @@ void couplingSetup(std::string_view config_file) {
   nrs->coupling_bbox[3] = bby2 + tol_bb;
   nrs->coupling_bbox[4] = bbz1 - tol_bb;
   nrs->coupling_bbox[5] = bbz2 + tol_bb;
-  printf("\n\n\n %f %f %f %f %f %f \n", bbx1,bbx2,bby1,bby2,bbz1,bbz2);
-
-  bool periodic = true;
-  dfloat per_1 = 0.;
-  dfloat per_2 = 1.;
-
-  precice::string_view mesh_name = "Nek-Mesh";
-  precice::string_view direct_mesh_name = "Murphy-Mesh";
-  precice::string_view data_name = "Murphy_u";
-  precice::string_view data2_name = "Murphy_w";
-  precice::string_view direct_data_name = "Nek_u";
-  precice::string_view direct_data_name_cum = "Nek_cum";
 
   nrs->coupling = new Coupling(solver_name, config_file);
   Coupling * coupling = nrs->coupling;
@@ -298,14 +284,11 @@ void couplingSetup(std::string_view config_file) {
       }
     }
   }
-
   double vertices_temp [3* boundary_points_counter]; //temp array to store all the outer vertices
   coupling->Resize_mapping(boundary_points_counter); //total number of nek outer vertices (as seen by nek)
   std::vector<int> * mapping = coupling->mapping(); //mapping from the nek mesh to the precice buffe
   int counter_to_idM[boundary_points_counter];
   
-  // int temp_mapping[boundary_points_counter];
-
   //filling vertices_temp with all the outer vertices (including the doubles!!)
 
   int total_count = 0;
@@ -318,33 +301,62 @@ void couplingSetup(std::string_view config_file) {
           const int n = m + f * p_Nfp;
           const int sk = e * p_Nfp * p_Nfaces + n;
           const dlong idM = ((mesh->vmapM))[sk];
-          // temp_mapping[sk] = idM;
-          vertices_temp[3 * total_count+ 0]  = nek_x[idM];
-          vertices_temp[3 * total_count + 1] = nek_y[idM];
-          if (periodic && abs(nek_z[idM] - per_2) < 1e-8) {           //periodicity in z hardcoded here
-            vertices_temp[3 * total_count + 2] = per_1;
+
+          if (periodic_dir[0] && abs(nek_x[idM] - periodic_bounds[1]) < 1e-8) {           //periodicity in x hardcoded here
+            vertices_temp[3 * total_count + 0] = periodic_bounds[0];
+          } else {
+            vertices_temp[3 * total_count + 0] = nek_x[idM];
+          }
+
+          if (periodic_dir[1] && abs(nek_y[idM] - periodic_bounds[3]) < 1e-8) {           //periodicity in y hardcoded here
+            vertices_temp[3 * total_count + 1] = periodic_bounds[2];
+          } else {
+            vertices_temp[3 * total_count + 1] = nek_y[idM];
+          }
+
+          if (periodic_dir[2] && abs(nek_z[idM] - periodic_bounds[5]) < 1e-8) {           //periodicity in z hardcoded here
+            vertices_temp[3 * total_count + 2] = periodic_bounds[4];
           } else {
             vertices_temp[3 * total_count + 2] = nek_z[idM];
           }
+
           counter_to_idM[total_count] = idM;
           total_count ++;
-          if( 1== 1) {  // also send the second layer of points as nek vertices
-            const dlong idM_el = idM - e * p_Np ;               // equivalent to k * p_Nq * p_Nq + j * p_Nq + i
-            const dlong remainder = idM_el % (p_Nq * p_Nq);            
-            const int idz = idM_el/(p_Nq * p_Nq);             //volumic z (k) index within this element 
-            const int idy = remainder / p_Nq;                 //volumic y (j) index within this element 
-            const int idx = remainder % p_Nq;  
-            const dlong idM_local = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + idx - 1;
-            vertices_temp[3 * total_count+ 0]  = nek_x[idM_local];
-            vertices_temp[3 * total_count + 1] = nek_y[idM_local];
-            if (periodic && abs(nek_z[idM_local] - per_2) < 1e-8) {
-              vertices_temp[3 * total_count + 2] = per_1;
-            } else {
-              vertices_temp[3 * total_count + 2] = nek_z[idM_local];
-            }
-            counter_to_idM[total_count] = idM_local;
-            total_count ++;
+
+
+          //sending the second layer of points also 
+          const dlong idM_el = idM - e * p_Np ;               // equivalent to k * p_Nq * p_Nq + j * p_Nq + i
+          const dlong remainder = idM_el % (p_Nq * p_Nq);            
+          const int idz = idM_el/(p_Nq * p_Nq);             //volumic z (k) index within this element 
+          const int idy = remainder / p_Nq;                 //volumic y (j) index within this element 
+          const int idx = remainder % p_Nq;
+          dlong idM_local;
+          if (f == 4) idM_local = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + idx + 1; 
+          if (f == 2) idM_local = e * p_Np + idz * p_Nq * p_Nq + idy * p_Nq + idx - 1; 
+          if (f == 1) idM_local = e * p_Np + idz * p_Nq * p_Nq + (idy + 1) * p_Nq + idx; 
+          if (f == 3) idM_local = e * p_Np + idz * p_Nq * p_Nq + (idy - 1) * p_Nq + idx; 
+          if (f == 0) idM_local = e * p_Np + (idz + 1) * p_Nq * p_Nq + idy * p_Nq + idx; 
+          if (f == 5) idM_local = e * p_Np + (idz - 1) * p_Nq * p_Nq + idy * p_Nq + idx; 
+
+          if (periodic_dir[0] && abs(nek_x[idM_local] - periodic_bounds[1]) < 1e-8) {           //periodicity in x hardcoded here
+            vertices_temp[3 * total_count + 0] = periodic_bounds[0];
+          } else {
+            vertices_temp[3 * total_count + 0] = nek_x[idM_local];
           }
+
+          if (periodic_dir[1] && abs(nek_y[idM_local] - periodic_bounds[3]) < 1e-8) {           //periodicity in y hardcoded here
+            vertices_temp[3 * total_count + 1] = periodic_bounds[2];
+          } else {
+            vertices_temp[3 * total_count + 1] = nek_y[idM_local];
+          }
+
+          if (periodic_dir[2] && abs(nek_z[idM_local] - periodic_bounds[5]) < 1e-8) {           //periodicity in z hardcoded here
+            vertices_temp[3 * total_count + 2] = periodic_bounds[4];
+          } else {
+            vertices_temp[3 * total_count + 2] = nek_z[idM_local];
+          }
+          counter_to_idM[total_count] = idM_local;
+          total_count ++;
         }
       }
     }
