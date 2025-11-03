@@ -29,6 +29,10 @@ void registerPostProcessingKernels()
   fileName = oklpath + "/postProcessing/" + kernelName + ".okl";
   platform->kernels.add(kernelName, fileName, kernelInfo);
 
+  kernelName = "dragVector";
+  fileName = oklpath + "/postProcessing/" + kernelName + ".okl";
+  platform->kernels.add(kernelName, fileName, kernelInfo);
+
   kernelInfo["includes"] += oklpath + "/postProcessing/planarAveraging.h";
 
   for (const std::string dir : {"XY", "XZ", "YZ"}) {

@@ -608,10 +608,11 @@ int main(int argc, char** argv)
     do {
       converged = nekrs::runStep(corrector++);
     } while (!converged);
- 
+    
+    
     time = nekrs::finishStep();
 
-    
+
 
     if(nekrs::updateFileCheckFreq()) {
       if(tStep % nekrs::updateFileCheckFreq()) 

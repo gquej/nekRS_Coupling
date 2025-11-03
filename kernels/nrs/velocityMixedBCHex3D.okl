@@ -291,6 +291,20 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
 @barrier();
 }
 
+//Dimensionless parameters and fixed values
+double St = 0.19;
+double Uinf = 0.2;
+double radius = 1.5; 
+double fc_f0 = 1.0;
+double Am = 0.5;
+double f0 = St * Uinf / (2.0*radius);  
+double pi = 4.0 * atan(1.0);
+double xcenter = 4.0;
+double ycenter = 4.0;
+
+double fc = f0 * fc_f0;
+double ub_max = Uinf * Am;
+double ub = ub_max; //* sin(2.0*pi*time*fc);
 
 
 for (int f = 0; f < p_Nfaces; f++) {
@@ -302,8 +316,9 @@ const dlong bcType = EToB[f + p_Nfaces * e];
 
 if (bcType > 0) {
 if (bcType == p_bcTypeW) {
-UH[idM + 0 * offset] = 0.0;
-UH[idM + 1 * offset] = 0.0;
+
+UH[idM + 0 * offset] = -(y[idM]-ycenter)/radius*ub;   // Apply a rotation instead of 0.0
+UH[idM + 1 * offset] =  (x[idM]-xcenter)/radius*ub;
 UH[idM + 2 * offset] = 0.0;
 }
 }
