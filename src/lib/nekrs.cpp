@@ -225,7 +225,7 @@ void setup(MPI_Comm commg_in,
 void couplingSetup(std::string_view config_file,std::string_view solver_name,
   std::string_view mesh_name, std::string_view direct_mesh_name,
   std::string_view data_name, std::string_view data2_name,
-  std::string_view direct_data_name, std::string_view direct_data_name_cum,
+  std::string_view direct_data_name, std::string_view direct_data_name2, std::string_view direct_data_name_cum,
   double tol_bb, bool *periodic_dir, double * periodic_bounds) {
   mesh_t *mesh = nrs->meshV;
   int p_Nfaces = mesh->Nfaces;
@@ -406,12 +406,33 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
 
   nrs->o_coupling_bbox = platform->device.malloc(6 * sizeof(dlong), nrs->coupling_bbox);
   nrs->o_coupling_bbox.copyFrom(nrs->coupling_bbox);
-  coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name, direct_data_name_cum);
+  coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name, direct_data_name2, direct_data_name_cum);
   
   //setting up the interpolator
 
   const int np = coupling->direct_mesh_size();
   const auto offset = np;
+  nrs->interpolator = new pointInterpolation_t(nrs);
+  nrs->o_fields1D = platform->device.malloc(3 * offset * sizeof(dfloat));
+  std::vector<dfloat> xp, yp, zp;
+  
+  const std::vector<dfloat> *vertices = coupling->direct_vertices();
+
+  for (int i = 0; i < np; i++) {
+    xp.push_back((*vertices)[3 * i + 0]);
+    yp.push_back((*vertices)[3 * i + 1]);
+    zp.push_back((*vertices)[3 * i + 2]);
+  }
+  nrs->interpolator->setPoints(np, xp.data(), yp.data(), zp.data());
+  nrs->interpolator->find();
+}
+
+void resetupInterpolator(){
+  Coupling * coupling = nrs->coupling;
+  const int np = coupling->direct_mesh_size();
+  const auto offset = np;
+  delete nrs->interpolator;
+  nrs->o_fields1D.free();
   nrs->interpolator = new pointInterpolation_t(nrs);
   nrs->o_fields1D = platform->device.malloc(3 * offset * sizeof(dfloat));
   std::vector<dfloat> xp, yp, zp;
@@ -749,6 +770,7 @@ void couplingWrite() {
   const auto Nfields = 3;
   const int np = nrs->coupling->direct_mesh_size();
   const auto offset = np;
+  resetupInterpolator();
 
   nrs->interpolator->eval(Nfields,   // evaluation of the field o_U at the previously defined points, stored in o_fields1D
     nrs->fieldOffset, 
@@ -760,12 +782,31 @@ void couplingWrite() {
   nrs->o_fields1D.copyTo(U_eval.data());
   std::vector<double> * direct_data = nrs->coupling->direct_data();
   std::vector<double> * direct_data_cum = nrs->coupling->direct_data_cum();
+  std::vector<double> * direct_data2 = nrs->coupling->direct_data2();
   for (int i = 0; i < np; i++) {
     (*direct_data)[3 * i + 0] = U_eval[i + 0 * offset];
     (*direct_data)[3 * i + 1] = U_eval[i + 1 * offset];
     (*direct_data)[3 * i + 2] = U_eval[i + 2 * offset];
     (*direct_data_cum)[i] = 1.;
   }
+
+  const int unique_count = nrs->coupling->mesh_size();
+  mesh_t *mesh = nrs->meshV;
+  for (int i = 0; i < unique_count; i++) {
+    int idM = -1;
+    for (int j = 0; j < mesh->Nelements * mesh->Np; j++) {
+      if (nrs->coupling_vmap[j] == i) {
+        idM = j;
+        break;
+      }
+    }  
+    if (idM != -1) {
+      (*direct_data2)[3 * i + 0] = mesh->x[idM];
+      (*direct_data2)[3 * i + 1] = mesh->y[idM];
+      (*direct_data2)[3 * i + 2] = mesh->z[idM];
+    }
+  }
+  
 
   nrs->coupling->Write();
  }

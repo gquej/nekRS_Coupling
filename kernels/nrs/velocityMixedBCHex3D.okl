@@ -294,7 +294,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
 //Dimensionless parameters and fixed values
 double St = 0.19;
 double Uinf = 0.2;
-double radius = 1.5; 
+double radius = 1.566137; 
 double fc_f0 = 1.0;
 double Am = 0.5;
 double f0 = St * Uinf / (2.0*radius);  
@@ -320,6 +320,7 @@ if (bcType == p_bcTypeW) {
 UH[idM + 0 * offset] = -(y[idM]-ycenter)/radius*ub;   // Apply a rotation instead of 0.0
 UH[idM + 1 * offset] =  (x[idM]-xcenter)/radius*ub;
 UH[idM + 2 * offset] = 0.0;
+//printf("Pass, imposing %f %f at %f, %f\n", UH[idM], UH[idM+offset], x[idM]-4.0, y[idM]-4.0);
 }
 }
 }
