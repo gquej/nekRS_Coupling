@@ -51,7 +51,7 @@ void couplingRead (double dt);
 void couplingWrite();
 void couplingAdvance(double dt);
 double couplingMaxTimeStep();
-double coupling_dt(double * coupling_max_dt, double * dt_solver, int tStep);
+double coupling_dt(double coupling_max_dt, double dt_solver, double tol_floor_dt);
 void couplingSetup(std::string_view config_file,std::string_view solver_name,
                    std::string_view mesh_name, std::string_view direct_mesh_name,
                    std::string_view data_name, std::string_view data2_name,

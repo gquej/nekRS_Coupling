@@ -519,45 +519,9 @@ int main(int argc, char** argv)
   fflush(stdout);
   MPI_Pcontrol(1);
 
-  //coupling Setup
-  //
-  // CODE COMMENTED BELOW: TRYING TO DO SOME TIME STEPS BEFORE  
-  // std::string_view config_file = "../../../../Coupling_dir/precice-config-presim.xml";
-  // nekrs::couplingSetup(config_file);
-  // /////////////////////////////////////////////////////////////////////////////////////
-  // for (int pstep = 1; pstep < 6; ++pstep) {
-  //   double dt, dt_solver,coupling_max_dt;
-  //   MPI_Barrier(comm);
-  //   dt = 0.015/100000.;
-  //   ++tStep;
-  //   nekrs::initStep(time, dt, tStep);
+  //----------------------------------------------------------------------------------------------
+  //------------------------------- Coupling setup -----------------------------------------------
 
-  //   printf("iter %d %d \n", tStep, pstep);
-
-  //   nekrs::couplingRead(dt);
-
-  //   int corrector = 1;
-  //   bool converged = false;
-  //   do {
-  //     converged = nekrs::runStep(corrector++);
-  //   } while (!converged);
- 
-  //   time = nekrs::finishStep();
-  //   if (nekrs::printInfoFreq()) {
-  //     if (tStep % nekrs::printInfoFreq() == 0)
-  //       nekrs::printInfo(time, tStep, false, true);
-  //   }
-  //   MPI_Barrier(comm);
-
-  //   double tol_dt = 1.e-10;
-  //   if (abs(dt_solver - coupling_max_dt) < tol_dt) {
-  //     nekrs::couplingWrite();
-  //   }
-  //   nekrs::couplingAdvance(dt);
-
-  // }
-
-  // nekrs::couplingFinalize();
   std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
   std::string_view solver_name = "Nek";
   std::string_view mesh_name = "Nek-Mesh";
@@ -569,12 +533,16 @@ int main(int argc, char** argv)
   bool periodic_dir[3] = {false, false, true};
   double periodic_bounds[6] = {0., 0., 0., 0., 0., 1.};
   double tol_bb = 1.e-4;
+  double tol_floor_dt = 0.1; //tolerance for the coupling nek dt versus dt required by nek (coupling_dt < 1.1 * nek_dt)
+  double final_step_tol = 1.e-10; //tolerance to decided whether this nek dt is the last one for the current coupling window
 
   nekrs::couplingSetup(config_file, solver_name, mesh_name,
                       direct_mesh_name, data_name, data2_name,
                       direct_data_name, direct_data_name_cum, tol_bb,
                       periodic_dir, periodic_bounds);
-////////////////////////////////////////////////////////////////////////////////////
+  //------------------------------- Coupling setup -----------------------------------------------
+  //----------------------------------------------------------------------------------------------
+  
   while (!isLastStep) {
     MPI_Barrier(comm);
     const double timeStartStep = MPI_Wtime();
@@ -595,9 +563,13 @@ int main(int argc, char** argv)
     nekrs::outputStep(outputStep);
 
     if (tStep <= 1000) nekrs::verboseInfo(true); 
-    double coupling_max_dt;
-    double dt_solver;
-    dt = nekrs::coupling_dt(&coupling_max_dt, &dt_solver, tStep);
+
+    //----------------------------------------------------------------------------
+    //Coupling dt
+    double coupling_max_dt = nekrs::couplingMaxTimeStep();
+    dt = nekrs::coupling_dt(coupling_max_dt, dt, tol_floor_dt);
+    //----------------------------------------------------------------------------
+
     nekrs::initStep(time, dt, tStep);
 
     //Coupling: reading the murphy velocity and vorticity
@@ -650,11 +622,14 @@ int main(int argc, char** argv)
 
     if (tStep % 100 == 0) fflush(stdout);
 
-    double tol_dt = 1.e-10;
-    if (abs(dt_solver - coupling_max_dt) < tol_dt) {
+    //----------------------------------------------------------------------------
+    //Coupling write
+    if (abs(dt - coupling_max_dt) < final_step_tol) {
       nekrs::couplingWrite();
     }
     nekrs::couplingAdvance(dt);
+    //----------------------------------------------------------------------------
+
   }
   MPI_Pcontrol(0);
 

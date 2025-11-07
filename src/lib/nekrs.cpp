@@ -774,21 +774,25 @@ void couplingAdvance(double dt) { nrs->coupling->Advance(dt); }
 
 double couplingMaxTimeStep() { return nrs->coupling->GetMaxTimeStep(); }
 
-double coupling_dt(double * coupling_max_dt, double * dt_solver, int tStep) {
-  *coupling_max_dt =  nekrs::couplingMaxTimeStep();
-  double constant_dt;
-  platform->options.getArgs("DT", constant_dt);
+double coupling_dt(double coupling_max_dt, double dt_solver, double tol_floor_dt) {
+  double dt; //final dt decided by the coupling
+  double quotient = coupling_max_dt / dt_solver;
 
+  double floored_quotient = std::floor(quotient);
+  int floored_ratio = (int) floored_quotient;
+  double floored_dt = coupling_max_dt / floored_quotient;
 
-    nrs->dt[0] = constant_dt;
-    nrs->dt[1] = constant_dt;
-    nrs->dt[2] = constant_dt;
+  double ceiled_quotient = std::ceil(quotient);
+  int ceiled_ratio = (int) ceiled_quotient;
+  double ceiled_dt = coupling_max_dt / ceiled_quotient;
 
-  *dt_solver = constant_dt;
-  nrs->dt[0] = std::min(*coupling_max_dt, *dt_solver);
-  printf("This is the dt historic: %f %f %f\n", nrs->dt[0], nrs->dt[1],nrs->dt[2]);
-  return nrs->dt[0];
-
+  if ( (floored_dt - dt_solver) / dt_solver < tol_floor_dt) { //if proposed dt is larger than solver dt but within 10% (tol_floor_dt), we keep the proposed dt
+    dt = floored_dt;
+  } else { // else, we take the smaller dt
+    dt = ceiled_dt;
+  }
+  nrs->dt[0] = dt;
+  return dt;
 }
 
 
