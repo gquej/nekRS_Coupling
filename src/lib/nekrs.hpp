@@ -58,6 +58,7 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
                    std::string_view direct_data_name, std::string_view direct_data_name_cum,
                    double tol_bb, bool *periodic_dir, double * periodic_bounds);
 void couplingFinalize();
+bool isCouplingOngoing();
 }
 
 #endif

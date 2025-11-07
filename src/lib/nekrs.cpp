@@ -795,6 +795,8 @@ double coupling_dt(double coupling_max_dt, double dt_solver, double tol_floor_dt
   return dt;
 }
 
+bool isCouplingOngoing() {return nrs->coupling->IsCouplingOngoing(); }
+
 
 
 

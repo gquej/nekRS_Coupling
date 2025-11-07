@@ -543,7 +543,7 @@ int main(int argc, char** argv)
   //------------------------------- Coupling setup -----------------------------------------------
   //----------------------------------------------------------------------------------------------
   
-  while (!isLastStep) {
+  while (!isLastStep && nekrs::isCouplingOngoing()) {
     MPI_Barrier(comm);
     const double timeStartStep = MPI_Wtime();
 
@@ -634,6 +634,10 @@ int main(int argc, char** argv)
   MPI_Pcontrol(0);
 
   delete cmdOpt;
+
+  //finalize coupling
+  nekrs::couplingFinalize();
+
 
   const int exitValue = nekrs::finalize();
 
