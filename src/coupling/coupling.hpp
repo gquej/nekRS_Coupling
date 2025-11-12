@@ -75,6 +75,7 @@ class Coupling {
         vector_t *direct_data_cum() {return &direct_data_cum_;};
         vector_t *direct_data2() {return &direct_data2_;};
         vector<int> *mapping() {return &mapping_;};
+        bool IsCouplingOngoing() {return precice_->isCouplingOngoing();};
 
         ~Coupling() {Finalize();}
 
