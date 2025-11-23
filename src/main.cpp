@@ -522,7 +522,7 @@ int main(int argc, char** argv)
   //----------------------------------------------------------------------------------------------
   //------------------------------- Coupling setup -----------------------------------------------
 
-  std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
+  std::string_view config_file = "../../coupling_dir/precice-config_1.xml";
   std::string_view solver_name = "Nek";
   std::string_view mesh_name = "Nek-Mesh";
   std::string_view direct_mesh_name = "Murphy-Mesh";
@@ -536,7 +536,7 @@ int main(int argc, char** argv)
   double tol_bb = 1.e-4;
   double tol_floor_dt = 0.1; //tolerance for the coupling nek dt versus dt required by nek (coupling_dt < 1.1 * nek_dt)
   double final_step_tol = 1.e-10; //tolerance to decided whether this nek dt is the last one for the current coupling window
-
+  double dt_MURPHY;
   nekrs::couplingSetup(config_file, solver_name, mesh_name,
                       direct_mesh_name, data_name, data2_name,
                       direct_data_name, direct_data_name2, direct_data_name_cum, tol_bb,
@@ -568,7 +568,12 @@ int main(int argc, char** argv)
     //----------------------------------------------------------------------------
     //Coupling dt
     double coupling_max_dt = nekrs::couplingMaxTimeStep();
-    dt = nekrs::coupling_dt(coupling_max_dt, dt, tol_floor_dt);
+    double window_measurment = nekrs::couplingWindowMeasurement(coupling_max_dt);
+    if (window_measurment > 0.0){
+      dt_MURPHY = window_measurment;
+    }
+    printf("Time window according to NEK : %f\n", dt_MURPHY);
+    //dt = nekrs::coupling_dt(coupling_max_dt, dt, tol_floor_dt);
     //----------------------------------------------------------------------------
 
     nekrs::initStep(time, dt, tStep);
@@ -627,7 +632,7 @@ int main(int argc, char** argv)
     //----------------------------------------------------------------------------
     //Coupling write
     if (abs(dt - coupling_max_dt) < final_step_tol) {
-      nekrs::couplingWrite();
+      nekrs::couplingWrite(dt_MURPHY);
     }
     nekrs::couplingAdvance(dt);
     //----------------------------------------------------------------------------

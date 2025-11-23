@@ -35,6 +35,7 @@ static int firstOutfld = 1;
 static int enforceLastStep = 0;
 static int enforceOutputStep = 0;
 static bool initialized = false;
+static bool startOfWindow = true;
 
 namespace nekrs {
 
@@ -476,6 +477,8 @@ void udfExecuteStep(double time, int tstep, int isOutputStep)
 
   nek::ifoutfld(0);
   nrs->isOutputStep = 0;
+  mesh_t *mesh = nrs->meshV;
+  mesh->o_U.copyTo(mesh->U);
   platform->timer.toc("udfExecuteStep");
 }
 
@@ -766,7 +769,18 @@ void couplingRead (double dt) {
   nrs->o_coupling_data2.copyFrom(nrs->coupling->Get_data2());
 }
 
-void couplingWrite() {
+double couplingWindowMeasurement(double coupling_max_dt) {
+  double window_size;
+  if (startOfWindow){
+    startOfWindow = false;
+    window_size = coupling_max_dt;
+  } else {
+    window_size = -1.0;
+  }
+  return window_size;
+}
+
+void couplingWrite(double dt_MURPHY) {
   const auto Nfields = 3;
   const int np = nrs->coupling->direct_mesh_size();
   const auto offset = np;
@@ -792,6 +806,15 @@ void couplingWrite() {
 
   const int unique_count = nrs->coupling->mesh_size();
   mesh_t *mesh = nrs->meshV;
+  // Ensure host buffer is up-to-date with device values before reading
+  mesh->o_U.copyTo(mesh->U);
+
+  // Use block layout: each field is stored in a block of size nrs->fieldOffset
+  const dlong fieldOffset = nrs->fieldOffset;
+  dfloat *Ux = mesh->U + 0 * fieldOffset;
+  dfloat *Uy = mesh->U + 1 * fieldOffset;
+  dfloat *Uz = mesh->U + 2 * fieldOffset;
+
   for (int i = 0; i < unique_count; i++) {
     int idM = -1;
     for (int j = 0; j < mesh->Nelements * mesh->Np; j++) {
@@ -799,15 +822,15 @@ void couplingWrite() {
         idM = j;
         break;
       }
-    }  
+    }
     if (idM != -1) {
-      (*direct_data2)[3 * i + 0] = mesh->x[idM];
-      (*direct_data2)[3 * i + 1] = mesh->y[idM];
-      (*direct_data2)[3 * i + 2] = mesh->z[idM];
+      (*direct_data2)[3 * i + 0] = mesh->x[idM] + dt_MURPHY * Ux[idM];
+      (*direct_data2)[3 * i + 1] = mesh->y[idM] + dt_MURPHY * Uy[idM];
+      (*direct_data2)[3 * i + 2] = mesh->z[idM] + dt_MURPHY * Uz[idM];
     }
   }
   
-
+  startOfWindow = true;
   nrs->coupling->Write();
  }
 
