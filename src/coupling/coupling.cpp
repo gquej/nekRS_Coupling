@@ -20,7 +20,7 @@ Coupling::Coupling(std::string_view solver_name, std::string_view config_file)
 
 }
 
-void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct_mesh_name, precice::string_view data_name, double *bounding_box, precice::string_view data2_name, precice::string_view direct_data_name, precice::string_view direct_data_name2, precice::string_view direct_data_name_cum) {
+void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct_mesh_name, precice::string_view data_name, double *bounding_box, precice::string_view data2_name, precice::string_view direct_data_name, precice::string_view direct_data_name2, precice::string_view direct_data_name3, precice::string_view direct_data_name_cum) {
     mesh_name_ = mesh_name;
     direct_mesh_name_ = direct_mesh_name;
     data1_name_ = data_name;
@@ -28,7 +28,8 @@ void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct
     data2_name_ = data2_name;
     direct_data_name_ = direct_data_name;
     direct_data_name_cum_ = direct_data_name_cum;
-    direct_data_name2_ = direct_data_name2;
+    direct_data_name2_ = direct_data_name2;   // For Nek mesh coordinates
+    direct_data_name3_ = direct_data_name3;   // For Nek mesh velocity
     for (int i = 0; i < 6; i++)
     {
         bounding_box_[i] = bounding_box[i];
@@ -48,6 +49,7 @@ void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct
     direct_data_.resize(3 * direct_mesh_size_);
     direct_data_cum_.resize(direct_mesh_size_);
     direct_data2_.resize(3 * mesh_size_);
+    direct_data3_.resize(3 * mesh_size_);
     direct_vertex_IDs_.resize(direct_mesh_size_);
     precice_->getMeshVertexIDsAndCoordinates(direct_mesh_name_, direct_vertex_IDs_, direct_vertices_);
     
@@ -63,6 +65,7 @@ void Coupling::Write() {
     precice_->writeData(direct_mesh_name_, direct_data_name_, direct_vertex_IDs_, direct_data_);
     precice_->writeData(direct_mesh_name_, direct_data_name_cum_, direct_vertex_IDs_, direct_data_cum_);
     precice_->writeData(mesh_name_, direct_data_name2_, vertex_IDs_, direct_data2_);
+    precice_->writeData(mesh_name_, direct_data_name3_, vertex_IDs_, direct_data3_);
 }
 
 void Coupling::Resetup() {

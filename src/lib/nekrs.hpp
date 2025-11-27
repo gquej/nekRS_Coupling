@@ -56,7 +56,7 @@ double coupling_dt(double coupling_max_dt, double dt_solver, double tol_floor_dt
 void couplingSetup(std::string_view config_file,std::string_view solver_name,
                    std::string_view mesh_name, std::string_view direct_mesh_name,
                    std::string_view data_name, std::string_view data2_name,
-                   std::string_view direct_data_name, std::string_view direct_data_name2, 
+                   std::string_view direct_data_name, std::string_view direct_data_name2, std::string_view direct_data_name3, 
                    std::string_view direct_data_name_cum, double tol_bb, 
                    bool *periodic_dir, double * periodic_bounds);
 void resetupInterpolator();

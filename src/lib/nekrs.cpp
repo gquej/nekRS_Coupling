@@ -226,7 +226,8 @@ void setup(MPI_Comm commg_in,
 void couplingSetup(std::string_view config_file,std::string_view solver_name,
   std::string_view mesh_name, std::string_view direct_mesh_name,
   std::string_view data_name, std::string_view data2_name,
-  std::string_view direct_data_name, std::string_view direct_data_name2, std::string_view direct_data_name_cum,
+  std::string_view direct_data_name, std::string_view direct_data_name2, std::string_view direct_data_name3,
+  std::string_view direct_data_name_cum,
   double tol_bb, bool *periodic_dir, double * periodic_bounds) {
   mesh_t *mesh = nrs->meshV;
   int p_Nfaces = mesh->Nfaces;
@@ -407,7 +408,7 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
 
   nrs->o_coupling_bbox = platform->device.malloc(6 * sizeof(dlong), nrs->coupling_bbox);
   nrs->o_coupling_bbox.copyFrom(nrs->coupling_bbox);
-  coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name, direct_data_name2, direct_data_name_cum);
+  coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name, direct_data_name2, direct_data_name3, direct_data_name_cum);
   
   //setting up the interpolator
 
@@ -797,6 +798,7 @@ void couplingWrite(double dt_MURPHY) {
   std::vector<double> * direct_data = nrs->coupling->direct_data();
   std::vector<double> * direct_data_cum = nrs->coupling->direct_data_cum();
   std::vector<double> * direct_data2 = nrs->coupling->direct_data2();
+  std::vector<double> * direct_data3 = nrs->coupling->direct_data3();
   for (int i = 0; i < np; i++) {
     (*direct_data)[3 * i + 0] = U_eval[i + 0 * offset];
     (*direct_data)[3 * i + 1] = U_eval[i + 1 * offset];
@@ -824,9 +826,12 @@ void couplingWrite(double dt_MURPHY) {
       }
     }
     if (idM != -1) {
-      (*direct_data2)[3 * i + 0] = mesh->x[idM] + dt_MURPHY * Ux[idM];
-      (*direct_data2)[3 * i + 1] = mesh->y[idM] + dt_MURPHY * Uy[idM];
-      (*direct_data2)[3 * i + 2] = mesh->z[idM] + dt_MURPHY * Uz[idM];
+      (*direct_data2)[3 * i + 0] = mesh->x[idM]; //+ dt_MURPHY * Ux[idM];
+      (*direct_data2)[3 * i + 1] = mesh->y[idM]; //+ dt_MURPHY * Uy[idM];
+      (*direct_data2)[3 * i + 2] = mesh->z[idM]; //+ dt_MURPHY * Uz[idM];
+      (*direct_data3)[3 * i + 0] = Ux[idM];
+      (*direct_data3)[3 * i + 1] = Uy[idM];
+      (*direct_data3)[3 * i + 2] = Uz[idM];
     }
   }
   

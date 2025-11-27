@@ -46,6 +46,8 @@ class Coupling {
 
         string_t direct_data_name2_;  // The Nek mesh coordinates
         vector_t direct_data2_;
+        string_t direct_data_name3_;  // The Nek mesh velocity
+        vector_t direct_data3_;
 
         string_t direct_data_name_cum_; //The cumulative data to be sent or received
         vector_t direct_data_cum_; 
@@ -54,7 +56,7 @@ class Coupling {
     public: 
         Coupling() = default;
         explicit Coupling (std::string_view solver_name, std::string_view config_file);
-        void Setup(precice::string_view mesh_name, precice::string_view direct_mesh_name, precice::string_view data_name, double *bounding_box, precice::string_view data2_name, precice::string_view direct_data_name, precice::string_view direct_data_name2, precice::string_view direct_data_name_cum);
+        void Setup(precice::string_view mesh_name, precice::string_view direct_mesh_name, precice::string_view data_name, double *bounding_box, precice::string_view data2_name, precice::string_view direct_data_name, precice::string_view direct_data_name2, precice::string_view direct_data_name3, precice::string_view direct_data_name_cum);
         void Resize_mapping(int mapping_size) {mapping_.resize(mapping_size);};
         void Set_vertices(double *vertices, int size);
         void Resetup();
@@ -74,6 +76,7 @@ class Coupling {
         vector_t *direct_data() {return &direct_data_;};
         vector_t *direct_data_cum() {return &direct_data_cum_;};
         vector_t *direct_data2() {return &direct_data2_;};
+        vector_t *direct_data3() {return &direct_data3_;};
         vector<int> *mapping() {return &mapping_;};
         bool IsCouplingOngoing() {return precice_->isCouplingOngoing();};
 
