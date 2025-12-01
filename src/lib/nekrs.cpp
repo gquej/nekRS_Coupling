@@ -797,10 +797,19 @@ double coupling_dt(double coupling_max_dt, double dt_solver, double tol_floor_dt
 
 bool isCouplingOngoing() {return nrs->coupling->IsCouplingOngoing(); }
 
-
-
-
-} // namespace nekrs
+void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds) {
+  platform->par->extract("casedata", "preciceConfig", *config_file);
+  platform->par->extract("casedata", "periodicX", periodic_dir[0]);
+  platform->par->extract("casedata", "periodicY", periodic_dir[1]);
+  platform->par->extract("casedata", "periodicZ", periodic_dir[2]);
+  platform->par->extract("casedata", "periodicXmin", periodic_bounds[0]);
+  platform->par->extract("casedata", "periodicXmax", periodic_bounds[1]);
+  platform->par->extract("casedata", "periodicYmin", periodic_bounds[2]);
+  platform->par->extract("casedata", "periodicYmax", periodic_bounds[3]);
+  platform->par->extract("casedata", "periodicZmin", periodic_bounds[4]);
+  platform->par->extract("casedata", "periodicZmax", periodic_bounds[5]);
+} 
+}//namespace nekrs
 
 int nrsFinalize(nrs_t *nrs)
 {

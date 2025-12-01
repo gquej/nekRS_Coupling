@@ -522,7 +522,6 @@ int main(int argc, char** argv)
   //----------------------------------------------------------------------------------------------
   //------------------------------- Coupling setup -----------------------------------------------
 
-  std::string_view config_file = "../../../../Coupling_dir/precice-config.xml";
   std::string_view solver_name = "Nek";
   std::string_view mesh_name = "Nek-Mesh";
   std::string_view direct_mesh_name = "Murphy-Mesh";
@@ -530,12 +529,14 @@ int main(int argc, char** argv)
   std::string_view data2_name = "Murphy_w";
   std::string_view direct_data_name = "Nek_u";
   std::string_view direct_data_name_cum = "Nek_cum";
-  bool periodic_dir[3] = {false, false, true};
-  double periodic_bounds[6] = {0., 0., 0., 0., 0., 1.};
   double tol_bb = 1.e-4;
   double tol_floor_dt = 0.1; //tolerance for the coupling nek dt versus dt required by nek (coupling_dt < 1.1 * nek_dt)
   double final_step_tol = 1.e-10; //tolerance to decided whether this nek dt is the last one for the current coupling window
-
+  std::string config_file;
+  bool periodic_dir[3];
+  double periodic_bounds[6];
+  
+  nekrs::readCouplingParameters(&config_file, periodic_dir, periodic_bounds);
   nekrs::couplingSetup(config_file, solver_name, mesh_name,
                       direct_mesh_name, data_name, data2_name,
                       direct_data_name, direct_data_name_cum, tol_bb,

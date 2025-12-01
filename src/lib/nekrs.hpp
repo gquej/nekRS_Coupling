@@ -59,6 +59,7 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
                    double tol_bb, bool *periodic_dir, double * periodic_bounds);
 void couplingFinalize();
 bool isCouplingOngoing();
+void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds);
 }
 
 #endif
