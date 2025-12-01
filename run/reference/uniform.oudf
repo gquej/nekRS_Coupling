@@ -1,0 +1,6 @@
+void velocityDirichletConditions(bcData *bc)
+{
+  // bc->u = 1.0;
+  // bc->v = 0;
+  // bc->w = 0;
+}

@@ -1,0 +1,33 @@
+#include "udf.hpp"
+
+
+// void UDF_LoadKernels(occa::properties &kernelInfo)
+// {
+// }
+static bool restart = false;
+
+void UDF_Setup0(MPI_Comm comm, setupAide &options)
+{
+  platform->par->extract("casedata", "restart",restart);
+
+}
+
+void UDF_Setup(nrs_t *nrs)
+{
+  auto mesh = nrs->meshV;
+  if (!restart) {
+    for (int n = 0; n < mesh->Nlocal; n++) {
+      const auto x = mesh->x[n];
+      const auto y = mesh->y[n];
+      const auto z = mesh->z[n];
+
+      nrs->U[n + 0 * nrs->fieldOffset] = 0.2;
+      nrs->U[n + 1 * nrs->fieldOffset] = 0.;
+      nrs->U[n + 2 * nrs->fieldOffset] = 0.;
+    }
+  }
+}
+
+// void UDF_ExecuteStep(nrs_t *nrs, dfloat time, int tstep)
+// {
+// }
