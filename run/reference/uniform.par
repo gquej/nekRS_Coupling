@@ -1,0 +1,49 @@
+[GENERAL]
+polynomialOrder = 4 
+#cubaturePolynomialOrder = 9 
+
+#startFrom = "r.fld"
+
+stopAt = endTime
+#endTime = 0.002
+endTime = 200.
+#dt = targetCFL=2 + max=2e-2
+#dt = 0.005
+dt = targetCFL=0.4 + initial=0.003
+timeStepper = tombo2
+#writeControl = simulationTime 
+writeInterval =10
+#startFrom = uniform0.f00020
+
+[CASEDATA]
+#restart = 1
+preciceConfig = ../../../../Coupling_dir/precice-config.xml
+periodicX = 0
+periodicY = 0
+periodicZ = 0
+periodicXmin = 0
+periodicXmax = 0
+periodicYmin = 0
+periodicYmax = 0
+periodicZmin = 0
+periodicZmax = 1
+
+[PROBLEMTYPE]
+equation = navierStokes
+
+[PRESSURE]
+solver = pfcg
+residualTol = 1e-04
+preconditioner = multigrid
+smootherType = JAC+Chebyshev
+
+[VELOCITY]
+#boundaryTypeMap = w,v
+residualTol = 1e-06
+density = 1.0
+viscosity = 0.0008
+
+
+[BOOMERAMG]
+iterations = 1
+

@@ -62,6 +62,7 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
 void resetupInterpolator();
 void couplingFinalize();
 bool isCouplingOngoing();
+void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds);
 }
 
 #endif

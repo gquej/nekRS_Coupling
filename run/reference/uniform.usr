@@ -1,0 +1,103 @@
+c-----------------------------------------------------------------------
+      subroutine userchk
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine useric (ix,iy,iz,ieg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat   ! This routine to modify element vertices
+      include 'SIZE'      ! _before_ mesh is generated, which 
+      include 'TOTAL'     ! guarantees GLL mapping of mesh.
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2()  ! This routine to modify mesh coordinates
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      real xt,yt,zt
+      real a,b 
+      real temp
+      real temp1,temp2,temp3 
+      real c 
+      real x1,y1
+      integer f,e
+
+      real relative_size, vpm_size
+      relative_size = 0.6 !sphere diameter versus vpm domain width
+      vpm_size = 4.
+
+
+
+      ntot = nx1*ny1*nz1*nelt
+
+
+
+      PI  = 4.*ATAN(1.0) 
+      do i=1,ntot
+      xt = xm1(i,1,1,1)
+      yt = ym1(i,1,1,1)
+      zt = zm1(i,1,1,1)
+      xm1(i,1,1,1) = vpm_size*relative_size*xt/4. + vpm_size/2.
+      ym1(i,1,1,1) = vpm_size*relative_size*yt/4. + vpm_size/2.
+      zm1(i,1,1,1) = vpm_size*relative_size*zt/4. + vpm_size/2.
+      enddo
+      param(59) = 1. ! Force nek5 to recognize element deformation.
+      do e=1,nelt
+      do f=1,2*ndim
+      if (cbc(f,e,1) .eq. 'W  ') boundaryID(f,e) = 1
+      enddo
+      enddo
+
+      do e=1,nelt
+      do f=1,2*ndim
+      if (cbc(f,e,1) .eq. 'v  ') boundaryID(f,e) = 2
+      enddo
+      enddo
+
+      do e=1,nelt
+      do f=1,2*ndim
+      if (cbc(f,e,1) .eq. 'P  ') boundaryID(f,e) = 0
+      enddo
+      enddo
+
+      ! do e = 1, nelt 
+      ! do f = 1, 2*ndim 
+      ! print *, e,f,cbc(f,e,1),boundaryID(f,e)
+
+      ! enddo 
+      ! enddo
+
+
+
+
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat0
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
