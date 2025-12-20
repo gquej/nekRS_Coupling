@@ -816,7 +816,8 @@ void couplingWrite(double dt_MURPHY) {
   dfloat *Ux = mesh->U + 0 * fieldOffset;
   dfloat *Uy = mesh->U + 1 * fieldOffset;
   dfloat *Uz = mesh->U + 2 * fieldOffset;
-
+  dfloat* coeffAB = mesh->coeffAB;
+  int nAB = mesh->nAB;
   for (int i = 0; i < unique_count; i++) {
     int idM = -1;
     for (int j = 0; j < mesh->Nelements * mesh->Np; j++) {
@@ -832,6 +833,13 @@ void couplingWrite(double dt_MURPHY) {
       (*direct_data3)[3 * i + 0] = Ux[idM];
       (*direct_data3)[3 * i + 1] = Uy[idM];
       (*direct_data3)[3 * i + 2] = Uz[idM];
+      /*
+      for (int k = 0; k < nAB; k++){
+        dfloat coeff = coeffAB[k]/nrs->dt[0];
+        (*direct_data3)[3 * i + 0] += Ux[idM + 3*k* fieldOffset] * coeff;
+        (*direct_data3)[3 * i + 1] += Uy[idM + 3*k* fieldOffset] * coeff;
+        (*direct_data3)[3 * i + 2] += Uz[idM + 3*k* fieldOffset] * coeff;
+      }*/
     }
   }
   
