@@ -1,0 +1,124 @@
+c-----------------------------------------------------------------------
+      subroutine userchk
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine useric (ix,iy,iz,ieg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat   ! This routine to modify element vertices
+      include 'SIZE'      ! _before_ mesh is generated, which 
+      include 'TOTAL'     ! guarantees GLL mapping of mesh.
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2()  ! This routine to modify mesh coordinates
+
+c      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      real xt,yt,zt
+      real a,b 
+      real temp
+      real temp1,temp2,temp3 
+      real c 
+      real x1,y1
+      integer f,e
+
+
+
+      ntot = nx1*ny1*nz1*nelt
+
+
+      a = -0.146
+      !a = 0.
+      PI  = 4.*ATAN(1.0) 
+      a = 0.
+      c = 1.*0.65  !*2.
+      b = 1./(2*exp(c))
+      ! do i = 1, ntot !deform the cylinder... 
+      ! xt = xm1(i,1,1,1)
+      ! yt = ym1(i,1,1,1)
+      ! zt = zm1(i,1,1,1)
+      ! xm1(i,1,1,1) =xm1(i,1,1,1)-0.3*cos(2*pi*zt)*(1-xt)*cos(2*pi*yt)
+
+      ! enddo
+      do i=1,ntot
+      xt = xm1(i,1,1,1)
+      yt = ym1(i,1,1,1)
+      x1 = exp(c*xt)*cos(2*pi*yt)/(2*exp(c))
+      y1 = exp(c*xt)*sin(2*pi*yt)/(2*exp(c))
+
+      temp = a*a*y1*y1+(a*x1+b)*(a*x1+b)
+      temp1 = a*b*b*(a*x1+b)
+      temp2 = a*b*y1*y1 
+      temp3 = b*x1*(a*x1+b) 
+      xm1(i,1,1,1) = (temp1+temp2+temp3)/temp
+
+      temp = a*a*y1*y1+(a*x1+b)*(a*x1+b)
+      temp1 = -a*a*b*b*y1
+      temp2 = -a*b*x1*y1
+      temp3 = b*y1*(a*x1+b)
+      ym1(i,1,1,1) = (temp1+temp2+temp3)/temp
+
+
+      xm1(i,1,1,1) = xm1(i,1,1,1)*6. + 8.
+      ym1(i,1,1,1) = ym1(i,1,1,1)*6. + 4.
+      enddo
+      param(59) = 1. ! Force nek5 to recognize element deformation.
+      do e=1,nelt
+      do f=1,2*ndim
+      if (cbc(f,e,1) .eq. 'W  ') boundaryID(f,e) = 1  ! Changed from uniform.usr 
+      enddo
+      enddo
+
+      do e=1,nelt
+      do f=1,2*ndim
+      if (cbc(f,e,1) .eq. 'v  ') boundaryID(f,e) = 1  ! Changed from uniform.usr
+      enddo
+      enddo
+
+      do e=1,nelt
+      do f=1,2*ndim
+      if (cbc(f,e,1) .eq. 'P  ') boundaryID(f,e) = 0
+      enddo
+      enddo
+
+      ! do e = 1, nelt 
+      ! do f = 1, 2*ndim 
+      ! print *, e,f,cbc(f,e,1),boundaryID(f,e)
+
+      ! enddo 
+      ! enddo
+
+
+
+
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat0
+      include 'SIZE'
+      include 'TOTAL'
+
+      return
+      end
+c-----------------------------------------------------------------------

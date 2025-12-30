@@ -1,0 +1,130 @@
+#include "udf.hpp"
+#include "postProcessing.hpp"
+
+// void UDF_LoadKernels(occa::properties &kernelInfo)
+// {
+// }
+
+// void UDF_Setup0(MPI_Comm comm, setupAide &options)
+// {
+
+// }
+static bool restart = false;
+static dfloat ux = 0.0;
+static dfloat uy = 0.0;
+static dfloat uz = 0.0;
+static dfloat wx = 0.0;
+static dfloat wy = 0.0;
+static dfloat wz = 0.0;
+static dfloat xcenter = 0.0;
+static dfloat ycenter = 0.0;
+static dfloat zcenter = 0.0;
+
+static dfloat L = 16.0;
+static dfloat uref = 0.3125; 
+
+void UDF_Setup0(MPI_Comm comm, setupAide &options)
+{
+  platform->par->extract("casedata", "restart",restart);
+  platform->par->extract("casedata", "ux", ux);
+  platform->par->extract("casedata", "uy", uy);
+  platform->par->extract("casedata", "uz", uz);
+  platform->par->extract("casedata", "wx", wx);
+  platform->par->extract("casedata", "wy", wy);
+  platform->par->extract("casedata", "wz", wz);
+  platform->par->extract("casedata", "xcenter", xcenter);
+  platform->par->extract("casedata", "ycenter", ycenter);
+  platform->par->extract("casedata", "zcenter", zcenter);
+  
+  platform->par->extract("casedata", "L", L);
+  platform->par->extract("casedata", "uref", uref);
+    
+}
+
+#ifdef __okl__
+
+void velocityDirichletConditions(bcData *bc)
+{
+  // bc->u = 1.0;
+  // bc->v = 0;
+  // bc->w = 0;
+}
+
+void meshVelocityDirichletConditions(bcData *bc) 
+{
+  
+}
+
+@kernel void userMeshVelocity(const dlong Nelements,
+                              const dlong offset,
+                              const dfloat time,
+                              @ restrict const dfloat *u_mesh,
+                              @ restrict const dfloat *w_mesh,
+                              @ restrict const dfloat *center,
+                              @ restrict const dfloat *x,
+                              @ restrict const dfloat *y,
+                              @ restrict const dfloat *z, 
+                              @ restrict dfloat *W)
+{ 
+  const dfloat pi = atan(1.0)*4.0;
+  dfloat xcenter_t = center[0] + time * u_mesh[0];
+  dfloat ycenter_t = center[1] + time * u_mesh[1]; 
+  dfloat zcenter_t = center[2] + time * u_mesh[2];
+  for (dlong e = 0; e < Nelements; ++e; @outer(0)) {
+    for (int n = 0; n < p_Np; ++n; @inner(0)) {
+      const int id = e*p_Np + n;
+      W[id + 0 * offset] = -(y[id]-ycenter_t) * w_mesh[2] + u_mesh[0]; //0.2*cos(2*pi*time/25.0);
+      W[id + 1 * offset] =  (x[id]-xcenter_t) * w_mesh[2] + u_mesh[1]; //0.2*sin(2*pi*time/25.0);
+      W[id + 2 * offset] = 0.0;
+    }
+  }
+}
+
+#endif
+
+void UDF_Setup(nrs_t *nrs)
+{
+  auto mesh = nrs->meshV;
+  auto Uref = uref;
+  const dfloat pi = atan(1.0)*4.0;
+    for (int n = 0; n < mesh->Nlocal; n++) {
+      const auto x = mesh->x[n];
+      const auto y = mesh->y[n];
+      const auto z = mesh->z[n];
+      const auto u =  sin(2*pi*x/L)*cos(2*pi*y/L) * Uref;
+      const auto v = -cos(2*pi*x/L)*sin(2*pi*y/L) * Uref; 
+      nrs->U[n + 0 * nrs->fieldOffset] = u;
+      nrs->U[n + 1 * nrs->fieldOffset] = v;
+      nrs->U[n + 2 * nrs->fieldOffset] = 0.;
+    }
+}
+
+void UDF_ExecuteStep(nrs_t *nrs, dfloat time, int tstep)
+{
+  mesh_t * mesh = nrs->meshV;
+  
+  // Créer les buffers GPU pour u, w, et center
+  dfloat u_host[3] = {ux, uy, uz};
+  dfloat w_host[3] = {wx, wy, wz};
+  dfloat center_host[3] = {xcenter, ycenter, zcenter};
+  
+  occa::memory o_u_mesh = platform->device.malloc(3 * sizeof(dfloat), u_host);
+  occa::memory o_w_mesh = platform->device.malloc(3 * sizeof(dfloat), w_host);
+  occa::memory o_center = platform->device.malloc(3 * sizeof(dfloat), center_host);
+  
+  if (time >= 0) {
+    if (mesh->o_x == nullptr) printf("No x\n");
+    if (mesh->o_U == nullptr) printf("No u\n");
+    userMeshVelocity(mesh->Nelements,
+                    nrs->fieldOffset,
+                    time,
+                    o_u_mesh,
+                    o_w_mesh,
+                    o_center,
+                    mesh->o_x,
+                    mesh->o_y,
+                    mesh->o_z,
+                    mesh->o_U);
+  }
+  mesh->o_U.copyTo(mesh->U);
+}
