@@ -285,7 +285,17 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     UH[idM + 0 * offset] = usol;
     UH[idM + 1 * offset] = vsol;
     UH[idM + 2 * offset] = wsol;
-    
+    /*if ((y[idM] == 12.0)&&(z[idM] == 1.0)){
+        printf("Imposing %f %f at (%f, %f)\n", usol, vsol, x[idM], y[idM]);
+        printf("Sampled value out of preCICE : upred, vpred = %f, %f\n", coupling_data1[3 * coupling_vmap[idM] + 0 ], coupling_data1[3 * coupling_vmap[idM] + 1]);
+        printf("Omega from preCICE : wx, wy, wz = %f, %f, %f\n", coupling_data2[3 * coupling_vmap[idM] + 0], coupling_data2[3 * coupling_vmap[idM] + 1], coupling_data2[3 * coupling_vmap[idM] + 2]);
+        printf("Tangential direction 1 : t1x, t1y, t1z = %f, %f, %f\n", t1x, t1y, t1z);
+        printf("Tangential direction 2 : t2x, t2y, t2z = %f, %f, %f\n", t2x, t2y, t2z);
+        printf("Matrix M : %f, %f, %f, %f, %f, %f, %f, %f, %f\n", M11, M12, M13, M21, M22, M23, M31, M32, M33);
+        printf("RHS B : %f, %f, %f\n", B1, B2, B3);
+        printf("dvdx, dudy = %f, %f\n", rx*du[3] + sx*du[4] + tx*du[5], ry*du[0] + sy*du[1] + ty*du[2]);
+        printf("wz = %f\n", rx*du[3] + sx*du[4] + tx*du[5] - ry*du[0] - sy*du[1] - ty*du[2]);
+    }*/
 }
 }
 @barrier();
@@ -299,8 +309,8 @@ double fc_f0 = 1.0;
 double Am = 0.5;
 double f0 = St * Uinf / (2.0*radius);  
 double pi = 4.0 * atan(1.0);
-double xcenter = 4.0;
-double ycenter = 4.0;
+double xcenter = 9.0;
+double ycenter = 9.0;
 
 double fc = f0 * fc_f0;
 double ub_max = Uinf * Am;
@@ -320,7 +330,7 @@ if (bcType == p_bcTypeW) {
 UH[idM + 0 * offset] = -(y[idM]-ycenter)/radius*ub;   // Apply a rotation instead of 0.0
 UH[idM + 1 * offset] =  (x[idM]-xcenter)/radius*ub;
 UH[idM + 2 * offset] = 0.0;
-//printf("Pass, imposing %f %f at %f, %f\n", UH[idM], UH[idM+offset], x[idM]-4.0, y[idM]-4.0);
+//printf("Pass, imposing %f %f at %f, %f\n", UH[idM], UH[idM+offset], x[idM]-6.0, y[idM]-9.0);
 }
 }
 }

@@ -27,7 +27,13 @@ struct nrs_t {
   occa::memory o_coupling_bbox;
   pointInterpolation_t *interpolator;
   occa::memory o_fields1D;
-
+  float MASS = 1.0;
+  float INERTIA[3] = {1.0, 1.0, 1.0};
+  float pos[3] = {0.0, 0.0, 0.0};
+  float orientation[3] = {0.0, 0.0, 0.0};
+  float vel[3] = {0.0, 0.0, 0.0};
+  float omega[3] = {0.0, 0.0, 0.0};
+  float oldforce[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
   static constexpr double targetTimeBenchmark {0.2};
 

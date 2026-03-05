@@ -8,13 +8,13 @@ namespace postProcessing
 
 void planarAvg(nrs_t *nrs, const std::string& dir, int NELGX, int NELGY, int NELGZ, int nflds, occa::memory o_avg);
 dfloat viscousDrag(nrs_t *nrs, int nbID, const occa::memory& o_bID, occa::memory& o_Sij);
-void totalDragVector(nrs_t *nrs, int nbID, const occa::memory& o_bID, occa::memory& o_Sij, float dragV[3]);
+void totalDragVector(nrs_t *nrs, int nbID, const occa::memory& o_bID, occa::memory& o_Sij, float dragV[6], occa::memory& o_pos);
 //       ( SO0          )         (     SO8  SO7)
 // Sij = ( SO3  SO1     )  Oij =  (          SO6)
 //       ( SO5  SO4  SO2)         (             )
 void strainRotationRate(nrs_t *nrs, bool smooth, bool rotationRate, occa::memory& o_Sij);
 void strainRate(nrs_t *nrs, bool smooth, occa::memory& o_Sij);
-
+void integrateDynamics(nrs_t *nrs, float dragV[6]);
 void Qcriterion(nrs_t *nrs, occa::memory& o_Q);
 }
 

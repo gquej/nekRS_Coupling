@@ -48,6 +48,8 @@ class Coupling {
         vector_t direct_data2_;
         string_t direct_data_name3_;  // The Nek mesh velocity
         vector_t direct_data3_;
+        vector_t global_data_; // Global mesh position
+        vector_t global_data2_; // Global mesh orientation
 
         string_t direct_data_name_cum_; //The cumulative data to be sent or received
         vector_t direct_data_cum_; 
@@ -77,6 +79,8 @@ class Coupling {
         vector_t *direct_data_cum() {return &direct_data_cum_;};
         vector_t *direct_data2() {return &direct_data2_;};
         vector_t *direct_data3() {return &direct_data3_;};
+        vector_t *global_data() {return &global_data_;};
+        vector_t *global_data2() {return &global_data2_;};
         vector<int> *mapping() {return &mapping_;};
         bool IsCouplingOngoing() {return precice_->isCouplingOngoing();};
 

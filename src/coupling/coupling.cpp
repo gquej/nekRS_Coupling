@@ -40,6 +40,19 @@ void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct
     vertex_IDs_.resize(mesh_size_);   
     precice_->setMeshVertices(mesh_name_, vertices_, vertex_IDs_);
 
+    //setup the global data mesh
+    double dummy[3] = {0.0, 0.0, 0.0};
+    int vertex_ID_dummy[1] = {0};
+    precice_->setMeshVertices("Global-Info", dummy, vertex_ID_dummy);
+    global_data_.resize(3);
+    global_data_[0] = 0.0;
+    global_data_[1] = 0.0;
+    global_data_[2] = 0.0;
+    global_data2_.resize(3);
+    global_data2_[0] = 0.0;
+    global_data2_[1] = 0.0;
+    global_data2_[2] = 0.0;
+
     //setup the direct mesh 
     precice_->setMeshAccessRegion(direct_mesh_name_, bounding_box_);
     precice_->initialize();
@@ -52,7 +65,8 @@ void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct
     direct_data3_.resize(3 * mesh_size_);
     direct_vertex_IDs_.resize(direct_mesh_size_);
     precice_->getMeshVertexIDsAndCoordinates(direct_mesh_name_, direct_vertex_IDs_, direct_vertices_);
-    
+    printf("Precice coupling setup complete. Direct mesh size: %d\n", direct_mesh_size_);
+    printf("Precice coupling setup complete. This mesh size: %d\n", mesh_size_);
 
 }
 
@@ -66,6 +80,9 @@ void Coupling::Write() {
     precice_->writeData(direct_mesh_name_, direct_data_name_cum_, direct_vertex_IDs_, direct_data_cum_);
     precice_->writeData(mesh_name_, direct_data_name2_, vertex_IDs_, direct_data2_);
     precice_->writeData(mesh_name_, direct_data_name3_, vertex_IDs_, direct_data3_);
+    int global_vertex_ID[1] = {0};
+    precice_->writeData("Global-Info", "Position", global_vertex_ID, global_data_);
+    precice_->writeData("Global-Info", "Orientation", global_vertex_ID, global_data2_);
 }
 
 void Coupling::Resetup() {

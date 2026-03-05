@@ -533,7 +533,7 @@ int main(int argc, char** argv)
   std::string_view direct_data_name_vel = "Nek_vel";
   double dt_MURPHY;
   
-  double tol_bb = 1.e-4;
+  double tol_bb = 2.e-2;
   double tol_floor_dt = 0.1; //tolerance for the coupling nek dt versus dt required by nek (coupling_dt < 1.1 * nek_dt)
   double final_step_tol = 1.e-10; //tolerance to decided whether this nek dt is the last one for the current coupling window
   std::string config_file;

@@ -260,11 +260,15 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
 
   nrs->coupling_bbox = new double[6];
   nrs->coupling_bbox[0] = bbx1 - tol_bb;
-  nrs->coupling_bbox[1] = 15.0; //bbx2 + tol_bb; Need to match Murphy especially for moving bodies
+  nrs->coupling_bbox[1] = bbx2 + tol_bb; //bbx2 + tol_bb; Need to match Murphy especially for moving bodies
   nrs->coupling_bbox[2] = bby1 - tol_bb;
   nrs->coupling_bbox[3] = bby2 + tol_bb;
   nrs->coupling_bbox[4] = bbz1 - tol_bb;
   nrs->coupling_bbox[5] = bbz2 + tol_bb;
+
+  platform->par->extract("casedata", "xmax", nrs->coupling_bbox[1]);
+  nrs->coupling_bbox[1] += tol_bb; //ensure we still have the tol_bb margin
+  printf("Overriding coupling bbox xmax to %f from casedata\n", nrs->coupling_bbox[1]);
 
   nrs->coupling = new Coupling(solver_name, config_file);
   Coupling * coupling = nrs->coupling;
@@ -799,6 +803,8 @@ void couplingWrite(double dt_MURPHY) {
   std::vector<double> * direct_data_cum = nrs->coupling->direct_data_cum();
   std::vector<double> * direct_data2 = nrs->coupling->direct_data2();
   std::vector<double> * direct_data3 = nrs->coupling->direct_data3();
+  std::vector<double> * global_data = nrs->coupling->global_data();
+  std::vector<double> * global_data2 = nrs->coupling->global_data2();
   for (int i = 0; i < np; i++) {
     (*direct_data)[3 * i + 0] = U_eval[i + 0 * offset];
     (*direct_data)[3 * i + 1] = U_eval[i + 1 * offset];
@@ -841,6 +847,11 @@ void couplingWrite(double dt_MURPHY) {
         (*direct_data3)[3 * i + 2] += Uz[idM + 3*k* fieldOffset] * coeff;
       }*/
     }
+  }
+
+  for (int i = 0; i < 3; i++){
+    (*global_data)[i] = nrs->pos[i];
+    (*global_data2)[i] = nrs->orientation[i];
   }
   
   startOfWindow = true;

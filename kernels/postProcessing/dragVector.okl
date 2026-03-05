@@ -4,6 +4,9 @@ if (t < bs) {                                                                   
 s_sum_x[t] += s_sum_x[t + bs];                                                                         \
 s_sum_y[t] += s_sum_y[t + bs];                                                                         \
 s_sum_z[t] += s_sum_z[t + bs];                                                                         \
+s_sumtx[t] += s_sumtx[t + bs];                                                                         \
+s_sumty[t] += s_sumty[t + bs];                                                                         \
+s_sumtz[t] += s_sumtz[t + bs];                                                                         \
 }
 
 @kernel void dragVector(const dlong Nelements,
@@ -18,17 +21,31 @@ s_sum_z[t] += s_sum_z[t + bs];                                                  
                   @ restrict const dfloat *PR,
                   @ restrict dfloat *sum_x,
                   @ restrict dfloat *sum_y,
-                  @ restrict dfloat *sum_z)
+                  @ restrict dfloat *sum_z,
+                  @ restrict dfloat *sumtrqx,
+                  @ restrict dfloat *sumtrqy,
+                  @ restrict dfloat *sumtrqz,
+                  @ restrict const dfloat *x,
+                  @ restrict const dfloat *y,
+                  @ restrict const dfloat *z,
+                  @ restrict dfloat *pos)
 {
   for (dlong e = 0; e < Nelements; e++; @outer(0)) {
     @shared volatile dfloat s_sum_x[p_blockSize];
     @shared volatile dfloat s_sum_y[p_blockSize];
     @shared volatile dfloat s_sum_z[p_blockSize];
-
+    @shared volatile dfloat s_sumtx[p_blockSize];
+    @shared volatile dfloat s_sumty[p_blockSize];
+    @shared volatile dfloat s_sumtz[p_blockSize];
+    
     for (int t = 0; t < p_blockSize; ++t; @inner(0)) {
       s_sum_x[t] = 0.0;
       s_sum_y[t] = 0.0;
       s_sum_z[t] = 0.0;
+      s_sumtx[t] = 0.0;
+      s_sumty[t] = 0.0;
+      s_sumtz[t] = 0.0;
+
       if (t < p_Nfp) {
         for (int f = 0; f < p_Nfaces; f++) {
           const dlong bIDM = EToBM[f + p_Nfaces * e];
@@ -68,6 +85,15 @@ s_sum_z[t] += s_sum_z[t + bs];                                                  
               s_sum_x[t] += dragx;
               s_sum_y[t] += dragy;
               s_sum_z[t] += dragz;
+
+              dfloat r1 = x[idM] - pos[0];
+              dfloat r2 = y[idM] - pos[1];
+              dfloat r3 = z[idM] - pos[2];
+
+              s_sumtx[t] += r2 * dragz - r3 * dragy;
+              s_sumty[t] += r3 * dragx - r1 * dragz;
+              s_sumtz[t] += r1 * dragy - r2 * dragx;
+
             }
           }
           @barrier();
@@ -129,6 +155,9 @@ s_sum_z[t] += s_sum_z[t + bs];                                                  
         sum_x[e] = s_sum_x[0] + s_sum_x[1];
         sum_y[e] = s_sum_y[0] + s_sum_y[1];
         sum_z[e] = s_sum_z[0] + s_sum_z[1];
+        sumtrqx[e] = s_sumtx[0] + s_sumtx[1];
+        sumtrqy[e] = s_sumty[0] + s_sumty[1];
+        sumtrqz[e] = s_sumtz[0] + s_sumtz[1];
       }
     }
     @barrier();
