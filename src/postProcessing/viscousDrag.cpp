@@ -154,10 +154,10 @@ void postProcessing::integrateDynamics(nrs_t *nrs, float dragV[6]) {
   */
   
   mesh_t *mesh = nrs->meshV;
-  float * pos = nrs->position;
-  float * orientation = nrs->orientation;
-  float * vel = nrs->velocity;
-  float * omega = nrs->omega;
+  dfloat * pos = nrs->position;
+  dfloat * orientation = nrs->orientation;
+  dfloat * vel = nrs->velocity;
+  dfloat * omega = nrs->omega;
   float * oldforce = nrs->oldforce;
   float m  = nrs->MASS;
   float I1 = nrs->INERTIA[0];   // TBD in setup !

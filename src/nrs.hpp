@@ -29,10 +29,10 @@ struct nrs_t {
   occa::memory o_fields1D;
   float MASS = 1.0;
   float INERTIA[3] = {1.0, 1.0, 1.0};
-  float position[3] = {0.0, 0.0, 0.0};
-  float orientation[3] = {0.0, 0.0, 0.0};
-  float velocity[3] = {0.0, 0.0, 0.0};
-  float omega[3] = {0.0, 0.0, 0.0};
+  dfloat position[3] = {0.0, 0.0, 0.0};
+  dfloat orientation[3] = {0.0, 0.0, 0.0};
+  dfloat velocity[3] = {0.0, 0.0, 0.0};
+  dfloat omega[3] = {0.0, 0.0, 0.0};
   float oldforce[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
   occa::memory o_position;
   occa::memory o_orientation;
