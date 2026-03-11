@@ -74,6 +74,10 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
 
   mesh_t *mesh = nrs->meshV;
 
+  nrs->o_position.copyFrom(nrs->position);
+  nrs->o_orientation.copyFrom(nrs->orientation);
+  nrs->o_velocity.copyFrom(nrs->velocity);
+  nrs->o_omega.copyFrom(nrs->omega);
   // int p_Nfaces = 6;
   // int p_Nfp = 9;
   
@@ -143,7 +147,11 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
                                    o_Ue, 
                                    nrs->o_coupling_vmap,
                                    nrs->o_coupling_bbox,
-                                   nrs->tstep);
+                                   nrs->tstep,
+                                   nrs->o_position,
+                                   nrs->o_orientation,
+                                   nrs->o_velocity,
+                                   nrs->o_omega);
 
     if (sweep == 0)
       oogs::startFinish(platform->o_mempool.slice0,

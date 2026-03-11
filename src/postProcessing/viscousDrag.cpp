@@ -154,9 +154,9 @@ void postProcessing::integrateDynamics(nrs_t *nrs, float dragV[6]) {
   */
   
   mesh_t *mesh = nrs->meshV;
-  float * pos = nrs->pos;
+  float * pos = nrs->position;
   float * orientation = nrs->orientation;
-  float * vel = nrs->vel;
+  float * vel = nrs->velocity;
   float * omega = nrs->omega;
   float * oldforce = nrs->oldforce;
   float m  = nrs->MASS;
@@ -218,4 +218,8 @@ void postProcessing::integrateDynamics(nrs_t *nrs, float dragV[6]) {
     nrs->oldforce[i] = dragV[i];   // For Euler explicit or Crank-Nicolson
   }
 
+  nrs->o_position.copyFrom(nrs->position);
+  nrs->o_orientation.copyFrom(nrs->orientation);
+  nrs->o_velocity.copyFrom(nrs->velocity);
+  nrs->o_omega.copyFrom(nrs->omega);
 }

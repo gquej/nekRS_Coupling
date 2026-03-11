@@ -29,11 +29,15 @@ struct nrs_t {
   occa::memory o_fields1D;
   float MASS = 1.0;
   float INERTIA[3] = {1.0, 1.0, 1.0};
-  float pos[3] = {0.0, 0.0, 0.0};
+  float position[3] = {0.0, 0.0, 0.0};
   float orientation[3] = {0.0, 0.0, 0.0};
-  float vel[3] = {0.0, 0.0, 0.0};
+  float velocity[3] = {0.0, 0.0, 0.0};
   float omega[3] = {0.0, 0.0, 0.0};
   float oldforce[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+  occa::memory o_position;
+  occa::memory o_orientation;
+  occa::memory o_velocity;
+  occa::memory o_omega;
 
   static constexpr double targetTimeBenchmark {0.2};
 

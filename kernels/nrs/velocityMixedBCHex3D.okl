@@ -58,7 +58,11 @@
     @ restrict const dfloat *Ue,
     @ restrict const dlong *coupling_vmap,
     @ restrict const dlong *bounding_box,
-    const dlong tstep)
+    const dlong tstep,
+    @ restrict const float *pos,
+    @ restrict const float *orientation,
+    @ restrict const float *vel,
+    @ restrict const float *omega)
 {
 //The following arrays contain the necessry info to treat each face 
 int list_ind_beg[6] = {1, 1, 0, 0, 1, 0}; //beginning index to compute the derivative in the normal direction
@@ -327,10 +331,18 @@ const dlong bcType = EToB[f + p_Nfaces * e];
 if (bcType > 0) {
 if (bcType == p_bcTypeW) {
 
-UH[idM + 0 * offset] = -(y[idM]-ycenter)/radius*ub;   // Apply a rotation instead of 0.0
-UH[idM + 1 * offset] =  (x[idM]-xcenter)/radius*ub;
-UH[idM + 2 * offset] = 0.0;
-//printf("Pass, imposing %f %f at %f, %f\n", UH[idM], UH[idM+offset], x[idM]-6.0, y[idM]-9.0);
+    //--------------------------------------------------------------------------------------------------------//
+    //---------------------------- Impose the velocity at the wall given its kinematics ----------------------//
+
+    // u = ux + omega_y * (z-zcenter) - omega_z * (y-ycenter)
+    // v = uy + omega_z * (x-xcenter) - omega_x * (z-zcenter)
+    // w = uz + omega_x * (y-ycenter) - omega_y * (x-xcenter)
+
+
+UH[idM + 0 * offset] = vel[0] + omega[1] * (z[idM] - pos[2]) - omega[2] * (y[idM] - pos[1]);
+UH[idM + 1 * offset] = vel[1] + omega[2] * (x[idM] - pos[0]) - omega[0] * (z[idM] - pos[2]);
+UH[idM + 2 * offset] = vel[2] + omega[0] * (y[idM] - pos[1]) - omega[1] * (x[idM] - pos[0]);
+
 }
 }
 }

@@ -266,8 +266,18 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
   nrs->coupling_bbox[4] = bbz1 - tol_bb;
   nrs->coupling_bbox[5] = bbz2 + tol_bb;
 
+  platform->par->extract("casedata", "xmin", nrs->coupling_bbox[0]);
   platform->par->extract("casedata", "xmax", nrs->coupling_bbox[1]);
+  platform->par->extract("casedata", "ymin", nrs->coupling_bbox[2]);
+  platform->par->extract("casedata", "ymax", nrs->coupling_bbox[3]);
+  platform->par->extract("casedata", "zmin", nrs->coupling_bbox[4]);
+  platform->par->extract("casedata", "zmax", nrs->coupling_bbox[5]);
+  nrs->coupling_bbox[0] -= tol_bb; //ensure we still have the tol_bb margin
   nrs->coupling_bbox[1] += tol_bb; //ensure we still have the tol_bb margin
+  nrs->coupling_bbox[2] -= tol_bb; //ensure we still have the tol_bb margin
+  nrs->coupling_bbox[3] += tol_bb; //ensure we still have the tol_bb margin
+  nrs->coupling_bbox[4] -= tol_bb; //ensure we still have the tol_bb margin
+  nrs->coupling_bbox[5] += tol_bb; //ensure we still have the tol_bb margin
   printf("Overriding coupling bbox xmax to %f from casedata\n", nrs->coupling_bbox[1]);
 
   nrs->coupling = new Coupling(solver_name, config_file);
@@ -850,7 +860,7 @@ void couplingWrite(double dt_MURPHY) {
   }
 
   for (int i = 0; i < 3; i++){
-    (*global_data)[i] = nrs->pos[i];
+    (*global_data)[i] = nrs->position[i];
     (*global_data2)[i] = nrs->orientation[i];
   }
   
