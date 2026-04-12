@@ -163,17 +163,17 @@ void postProcessing::integrateDynamics(nrs_t *nrs, float dragV[6]) {
   float I1 = nrs->INERTIA[0];   // TBD in setup !
   float I2 = nrs->INERTIA[1];
   float I3 = nrs->INERTIA[2];
-  float dt = nrs->dt[0];
+  dfloat dt = nrs->dt[0];
   for (int i = 0; i < 3; i++) {
     //pos[i] += vel[i] * dt;         // Explicit Euler for position update (use current velocity)
-    float oldvel = vel[i];
+    dfloat oldvel = vel[i];
     vel[i] += (dragV[i] + oldforce[i]) / (2.0*m) * dt;   // Implicit Euler (F is at n+1 as flow is at n+1 in post-processing) or Explicit if oldforce
     pos[i] += (oldvel + vel[i]) / 2.0 * dt;         // Implicit Euler for position update (use updated velocity)
   } 
-  std::vector<std::vector<float>> Q(3, std::vector<float>(3));
-  float phi = orientation[0];
-  float theta = orientation[1];
-  float psi = orientation[2];
+  std::vector<std::vector<dfloat>> Q(3, std::vector<dfloat>(3));
+  dfloat phi = orientation[0];
+  dfloat theta = orientation[1];
+  dfloat psi = orientation[2];
 
   Q[0][0] = cos(theta)*cos(psi);
   Q[0][1] = cos(theta)*sin(psi);
@@ -184,6 +184,40 @@ void postProcessing::integrateDynamics(nrs_t *nrs, float dragV[6]) {
   Q[2][0] = cos(phi)*sin(theta)*cos(psi) + sin(phi)*sin(psi);
   Q[2][1] = cos(phi)*sin(theta)*sin(psi) - sin(phi)*cos(psi);
   Q[2][2] = cos(phi)*cos(theta);
+
+  /*
+  double cp = cos(psi / 2.0);
+  double sp = sin(psi / 2.0);
+  double ct = cos(theta / 2.0);
+  double st = sin(theta / 2.0);
+  double cf = cos(phi / 2.0);
+  double sf = sin(phi / 2.0);
+  
+  q[0] = cp * ct * cf + sp * st * sf;  // w
+  q[1] = cp * ct * sf - sp * st * cf;  // x
+  q[2] = cp * st * cf + sp * ct * sf;  // y
+  q[3] = sp * ct * cf - cp * st * sf;  // z
+  
+  // Normalize
+  double norm = sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
+  for (int i = 0; i < 4; i++) q[i] /= norm;
+
+  // Change w of basis with q w q^-1 and integrate with torque
+  // Bring it back q^1 w q  for wx_n+1
+  // Integrate quaternion in time (maybe only with wx_n)
+  // Find psi, theta, phi from quaternion
+  // psi (rotation autour Z)
+  psi = atan2(2.0*(q0*q3 + q1*q2), 1.0 - 2.0*(q2*q2 + q3*q3));
+  
+  // theta (rotation autour Y)
+  double sinTheta = 2.0*(q0*q2 - q3*q1);
+  sinTheta = (sinTheta > 1.0) ? 1.0 : ((sinTheta < -1.0) ? -1.0 : sinTheta);
+  theta = asin(sinTheta);
+  
+  // phi (rotation autour X)
+  phi = atan2(2.0*(q0*q1 + q2*q3), 1.0 - 2.0*(q1*q1 + q2*q2));
+
+  */
 
   float trqBody[3] = {0.0, 0.0, 0.0};
   float omegaBody[3] = {0.0, 0.0, 0.0};

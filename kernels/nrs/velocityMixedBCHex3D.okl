@@ -59,10 +59,10 @@
     @ restrict const dlong *coupling_vmap,
     @ restrict const dlong *bounding_box,
     const dlong tstep,
-    @ restrict const float *pos,
-    @ restrict const float *orientation,
-    @ restrict const float *vel,
-    @ restrict const float *omega)
+    @ restrict const dfloat *pos,
+    @ restrict const dfloat *orientation,
+    @ restrict const dfloat *vel,
+    @ restrict const dfloat *omega)
 {
 //The following arrays contain the necessry info to treat each face 
 int list_ind_beg[6] = {1, 1, 0, 0, 1, 0}; //beginning index to compute the derivative in the normal direction
@@ -289,7 +289,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     UH[idM + 0 * offset] = usol;
     UH[idM + 1 * offset] = vsol;
     UH[idM + 2 * offset] = wsol;
-    /*if ((y[idM] == 12.0)&&(z[idM] == 1.0)){
+    /*if ((y[idM] > 10.87)&&(z[idM] >= 0.97)){
         printf("Imposing %f %f at (%f, %f)\n", usol, vsol, x[idM], y[idM]);
         printf("Sampled value out of preCICE : upred, vpred = %f, %f\n", coupling_data1[3 * coupling_vmap[idM] + 0 ], coupling_data1[3 * coupling_vmap[idM] + 1]);
         printf("Omega from preCICE : wx, wy, wz = %f, %f, %f\n", coupling_data2[3 * coupling_vmap[idM] + 0], coupling_data2[3 * coupling_vmap[idM] + 1], coupling_data2[3 * coupling_vmap[idM] + 2]);
@@ -342,7 +342,7 @@ if (bcType == p_bcTypeW) {
 UH[idM + 0 * offset] = vel[0] + omega[1] * (z[idM] - pos[2]) - omega[2] * (y[idM] - pos[1]);
 UH[idM + 1 * offset] = vel[1] + omega[2] * (x[idM] - pos[0]) - omega[0] * (z[idM] - pos[2]);
 UH[idM + 2 * offset] = vel[2] + omega[0] * (y[idM] - pos[1]) - omega[1] * (x[idM] - pos[0]);
-
+//printf("Imposing %f %f at (%f, %f)\n", UH[idM + 0 * offset], UH[idM + 1 * offset], x[idM], y[idM]);
 }
 }
 }

@@ -20,16 +20,27 @@ struct nrs_t {
   Coupling *coupling;
   occa::memory o_coupling_data1;
   occa::memory o_coupling_data2;
+  std::vector<double> interpval1;
+  std::vector<double> interpval2;
   occa::memory o_coupling_mapping;
   dlong *coupling_vmap;
+  std::vector<dlong> inverse_coupling_vmap;
   occa::memory o_coupling_vmap;
   dfloat *coupling_bbox;
   occa::memory o_coupling_bbox;
+  std::vector<dfloat> coupling_x_VPM;
+  std::vector<dfloat> coupling_y_VPM;
+  std::vector<dfloat> coupling_z_VPM;
+  std::vector<int> coupling_VPM_map;
+  std::vector<int> couplingMask;
+
   pointInterpolation_t *interpolator;
   occa::memory o_fields1D;
   float MASS = 1.0;
   float INERTIA[3] = {1.0, 1.0, 1.0};
+  dfloat L = 1.0; // Characteristic length
   dfloat position[3] = {0.0, 0.0, 0.0};
+  dfloat position0[3] = {0.0, 0.0, 0.0};
   dfloat orientation[3] = {0.0, 0.0, 0.0};
   dfloat velocity[3] = {0.0, 0.0, 0.0};
   dfloat omega[3] = {0.0, 0.0, 0.0};

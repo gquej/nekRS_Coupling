@@ -409,12 +409,15 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
 
   coupling->Set_vertices(vertices_temp, unique_count);
 
-  nrs->o_coupling_data1 = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data1());
-  nrs->o_coupling_data2 = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data2());
+  nrs->interpval1 = std::vector<double>(3 * unique_count, 0.0); // New vector for v at the unique vertices (for M2P)
+  nrs->interpval2 = std::vector<double>(3 * unique_count, 0.0); // New vector for omega at the unique vertices (for M2P)
+
+  nrs->o_coupling_data1 = platform->device.malloc(sizeof(double) * unique_count * 3, nrs->interpval1.data()); // This will have to change if M2P here
+  nrs->o_coupling_data2 = platform->device.malloc(sizeof(double) * unique_count * 3, nrs->interpval2.data()); // Replaced coupling->Get_data1() with nrs->interpval1 for M2P
   nrs->o_coupling_mapping = platform->device.malloc(sizeof(int) * boundary_points_counter, coupling ->Get_mapping());
 
-  nrs->o_coupling_data1.copyFrom(coupling->Get_data1());
-  nrs->o_coupling_data2.copyFrom(coupling->Get_data2());
+  nrs->o_coupling_data1.copyFrom(nrs->interpval1.data()); // Replaced coupling->Get_data1() with nrs->interpval1 for M2P
+  nrs->o_coupling_data2.copyFrom(nrs->interpval2.data());
   nrs->o_coupling_mapping.copyFrom(coupling->Get_mapping());
 
   nrs->o_coupling_vmap = platform->device.malloc(mesh->Nelements * mesh->Np * sizeof(dlong), nrs->coupling_vmap);
@@ -423,7 +426,17 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
   nrs->o_coupling_bbox = platform->device.malloc(6 * sizeof(dlong), nrs->coupling_bbox);
   nrs->o_coupling_bbox.copyFrom(nrs->coupling_bbox);
   coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name, direct_data_name2, direct_data_name3, direct_data_name_cum);
-  
+
+  nrs->inverse_coupling_vmap.resize(unique_count, -1);
+  for (int i = 0; i < unique_count; i++) {
+    int idM = -1;
+    for (int j = 0; j < mesh->Nelements * mesh->Np; j++) {
+      if (nrs->coupling_vmap[j] == i) {
+        nrs->inverse_coupling_vmap[i] = j;
+        break;
+      }
+    }
+  }
   //setting up the interpolator
 
   const int np = coupling->direct_mesh_size();
@@ -441,6 +454,75 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
   }
   nrs->interpolator->setPoints(np, xp.data(), yp.data(), zp.data());
   nrs->interpolator->find();
+  nrs->couplingMask.resize(np, 0);
+  // Need to transform direct mesh in x, y, z vectors for M4'
+  // Gather and filter coordinates and establish mapping to precice buffer :
+  // Point at x[idx_x], y[idx_y], z[idx_z] -> data[3*i + 0/1/2] with i = idx_x + Nx * (idx_y + Ny * idx_z)
+  
+  std::vector<dfloat> x_VPM_mesh, y_VPM_mesh, z_VPM_mesh;
+  x_VPM_mesh.reserve(np);
+  y_VPM_mesh.reserve(np);
+  z_VPM_mesh.reserve(np);
+
+  dfloat x, y, z;
+  for (int i = 0; i < np; i++) {
+    x = (*vertices)[3 * i + 0];
+    y = (*vertices)[3 * i + 1];
+    z = (*vertices)[3 * i + 2];
+    x_VPM_mesh.push_back(x);
+    y_VPM_mesh.push_back(y);
+    z_VPM_mesh.push_back(z);
+  }
+
+  auto unique_sorted = [tol](std::vector<dfloat> &values) {
+    std::sort(values.begin(), values.end());
+    values.erase(std::unique(values.begin(), values.end(), [tol](dfloat a, dfloat b) {
+                  return fabs(a - b) < tol;
+                }),
+                values.end());
+  };
+
+  unique_sorted(x_VPM_mesh);
+  unique_sorted(y_VPM_mesh);
+  unique_sorted(z_VPM_mesh);
+
+  auto findIndex = [tol](const std::vector<dfloat> &values, const dfloat value) -> int {
+    auto it = std::lower_bound(values.begin(), values.end(), value);
+    if (it != values.end() && fabs(*it - value) < tol) {
+      return static_cast<int>(it - values.begin());
+    }
+    if (it != values.begin()) {
+      auto prev = it - 1;
+      if (fabs(*prev - value) < tol) {
+        return static_cast<int>(prev - values.begin());
+      }
+    }
+    return -1;
+  };
+
+  nrs->coupling_x_VPM = x_VPM_mesh;
+  nrs->coupling_y_VPM = y_VPM_mesh;
+  nrs->coupling_z_VPM = z_VPM_mesh;
+  nrs->coupling_VPM_map.assign(x_VPM_mesh.size() * y_VPM_mesh.size() * z_VPM_mesh.size(), -1);
+
+  const int Nx = x_VPM_mesh.size();
+  const int Ny = y_VPM_mesh.size();
+  for (int i = 0; i < np; ++i) {
+    const dfloat xi = (*vertices)[3 * i + 0];
+    const dfloat yi = (*vertices)[3 * i + 1];
+    const dfloat zi = (*vertices)[3 * i + 2];
+
+    const int idx_x = findIndex(x_VPM_mesh, xi);
+    const int idx_y = findIndex(y_VPM_mesh, yi);
+    const int idx_z = findIndex(z_VPM_mesh, zi);
+
+    const int lin = idx_x + Nx * (idx_y + Ny * idx_z);
+    nrs->coupling_VPM_map[lin] = i;
+  }
+
+  printf("VPM mapping: %d unique x, %d unique y, %d unique z\n", Nx, Ny, z_VPM_mesh.size());
+  printf("VPM map size vs np : %d vs %d\n", nrs->coupling_VPM_map.size(), np);
+
 }
 
 void resetupInterpolator(){
@@ -778,10 +860,127 @@ double finishStep()
 
 bool stepConverged() { return nrs->timeStepConverged; }
 
+double Weight(double i) {
+  double dist = i;
+  if (dist < 0.0) dist = -i;
+
+  if (dist < 1.0) {
+        return 1.0 + (-2.5 + 1.5 * dist) * dist * dist;
+    } else if (dist < 2.0) {
+        return 2.0 + (-4.0 + (2.5 - 0.5 * dist) * dist) * dist;
+    } else {
+        return 0.0;
+    }
+}
+
+void M2Pinterp(nrs_t *nrs)
+{
+  Coupling *coupling = nrs->coupling;
+  const std::vector<dfloat> &xVPM = nrs->coupling_x_VPM;
+  const std::vector<dfloat> &yVPM = nrs->coupling_y_VPM;
+  const std::vector<dfloat> &zVPM = nrs->coupling_z_VPM;
+  const std::vector<int> &VPMmap = nrs->coupling_VPM_map;
+  const dfloat xmin = xVPM[0];
+  const dfloat ymin = yVPM[0];
+  const dfloat zmin = zVPM[0];
+  const dfloat hgrid = xVPM[1] - xVPM[0]; // Assuming uniform grid
+  double *VPM_v = coupling->Get_data1(); // size: 3*np
+  double *VPM_omega = coupling->Get_data2(); // size: 3*np
+  const int Nx = xVPM.size();
+  const int Ny = yVPM.size();
+  const int Nz = zVPM.size();
+  const int Nxy = Nx * Ny;
+
+  const int size = coupling->mesh_size(); // Every vertex of Nek we target
+  mesh_t *mesh = nrs->meshV;
+  mesh->o_x.copyTo(mesh->x);
+  mesh->o_y.copyTo(mesh->y);
+  mesh->o_z.copyTo(mesh->z);
+
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
+  for (int i = 0; i < size; i++) {
+    const int idM = nrs->inverse_coupling_vmap[i];
+
+    const double lx = (mesh->x[idM] - xmin) / hgrid;
+    const double ly = (mesh->y[idM] - ymin) / hgrid;
+    const double lz = (mesh->z[idM] - zmin) / hgrid;
+
+    const int idx_x = (int) floor(lx);
+    const int idx_y = (int) floor(ly);
+    const int idx_z = (int) floor(lz);
+
+    double acc1x = 0.0, acc1y = 0.0, acc1z = 0.0;
+    double acc2x = 0.0, acc2y = 0.0, acc2z = 0.0;
+
+    for (int i1 = -1; i1 < 3; i1++) {
+      const double rx = lx - (double) (idx_x + i1);
+      const double wx = Weight(rx);
+      if (wx == 0.0)
+        continue;
+
+      int idx_xx = idx_x + i1;
+      if (idx_xx < 0)
+        idx_xx += Nx;
+      else if (idx_xx >= Nx)
+        idx_xx -= Nx;
+
+      for (int j1 = -1; j1 < 3; j1++) {
+        const double ry = ly - (double) (idx_y + j1);
+        const double wy = Weight(ry);
+        if (wy == 0.0)
+          continue;
+
+        int idx_yy = idx_y + j1;
+        if (idx_yy < 0)
+          idx_yy += Ny;
+        else if (idx_yy >= Ny)
+          idx_yy -= Ny;
+
+        for (int k1 = -1; k1 < 3; k1++) {
+          const double rz = lz - (double) (idx_z + k1);
+          const double wz = Weight(rz);
+          if (wz == 0.0)
+            continue;
+
+          const double w = wx * wy * wz;
+
+          int idx_zz = idx_z + k1;
+          if (idx_zz < 0)
+            idx_zz += Nz;
+          else if (idx_zz >= Nz)
+            idx_zz -= Nz;
+
+          const int lin = idx_xx + Nx * idx_yy + Nxy * idx_zz;
+          const int map = 3 * VPMmap[lin];
+
+          acc1x += w * VPM_v[map + 0];
+          acc1y += w * VPM_v[map + 1];
+          acc1z += w * VPM_v[map + 2];
+          acc2x += w * VPM_omega[map + 0];
+          acc2y += w * VPM_omega[map + 1];
+          acc2z += w * VPM_omega[map + 2];
+        }
+      }
+    }
+
+    nrs->interpval1[3 * i + 0] += acc1x;
+    nrs->interpval1[3 * i + 1] += acc1y;
+    nrs->interpval1[3 * i + 2] += acc1z;
+    nrs->interpval2[3 * i + 0] += acc2x;
+    nrs->interpval2[3 * i + 1] += acc2y;
+    nrs->interpval2[3 * i + 2] += acc2z;
+  }
+}
+
 void couplingRead (double dt) {
   nrs->coupling->Read(dt);
-  nrs->o_coupling_data1.copyFrom(nrs->coupling->Get_data1());
-  nrs->o_coupling_data2.copyFrom(nrs->coupling->Get_data2());
+  nrs->interpval1.assign(nrs->interpval1.size(), 0.0); // Reset interpolation values before M2P
+  nrs->interpval2.assign(nrs->interpval2.size(), 0.0); // Reset interpolation values before M2P
+  M2Pinterp(nrs);
+  nrs->o_coupling_data1.copyFrom(nrs->interpval1.data()); // This will have to change if M2P here
+  nrs->o_coupling_data2.copyFrom(nrs->interpval2.data()); // Replaced coupling->Get_data2() with nrs->interpval2 for M2P
 }
 
 double couplingWindowMeasurement(double coupling_max_dt) {
@@ -815,10 +1014,25 @@ void couplingWrite(double dt_MURPHY) {
   std::vector<double> * direct_data3 = nrs->coupling->direct_data3();
   std::vector<double> * global_data = nrs->coupling->global_data();
   std::vector<double> * global_data2 = nrs->coupling->global_data2();
+  const std::vector<dfloat> *vertices = nrs->coupling->direct_vertices();
+  dfloat xp, yp, zp, dist, vx, vy, vz;
   for (int i = 0; i < np; i++) {
     (*direct_data)[3 * i + 0] = U_eval[i + 0 * offset];
     (*direct_data)[3 * i + 1] = U_eval[i + 1 * offset];
     (*direct_data)[3 * i + 2] = U_eval[i + 2 * offset];
+    xp = (*vertices)[3 * i + 0];
+    yp = (*vertices)[3 * i + 1];
+    zp = (*vertices)[3 * i + 2];
+    // Hardcoded for cylinder body here (L = D)
+    dist = sqrt((xp-nrs->position[0])*(xp-nrs->position[0]) + (yp-nrs->position[1])*(yp-nrs->position[1])); 
+    if (nrs->couplingMask[i] == 1) {
+      vx = nrs->velocity[0] + nrs->omega[1]*(zp-nrs->position[2]) - nrs->omega[2]*(yp-nrs->position[1]);
+      vy = nrs->velocity[1] + nrs->omega[2]*(xp-nrs->position[0]) - nrs->omega[0]*(zp-nrs->position[2]);
+      vz = nrs->velocity[2] + nrs->omega[0]*(yp-nrs->position[1]) - nrs->omega[1]*(xp-nrs->position[0]);
+      (*direct_data)[3 * i + 0] = vx;
+      (*direct_data)[3 * i + 1] = vy; // Impose U = Ubody inside
+      (*direct_data)[3 * i + 2] = vz;
+    }
     (*direct_data_cum)[i] = 1.;
   }
 
@@ -861,7 +1075,9 @@ void couplingWrite(double dt_MURPHY) {
 
   for (int i = 0; i < 3; i++){
     (*global_data)[i] = nrs->position[i];
+    (*global_data)[3 + i] = nrs->velocity[i];
     (*global_data2)[i] = nrs->orientation[i];
+    (*global_data2)[3 + i] = nrs->omega[i];
   }
   
   startOfWindow = true;

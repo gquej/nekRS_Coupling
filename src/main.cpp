@@ -518,7 +518,7 @@ int main(int argc, char** argv)
 
   fflush(stdout);
   MPI_Pcontrol(1);
-
+  nekrs::outfld(time, tStep);
   //----------------------------------------------------------------------------------------------
   //------------------------------- Coupling setup -----------------------------------------------
 
@@ -583,7 +583,7 @@ int main(int argc, char** argv)
     nekrs::initStep(time, dt, tStep);
 
     //Coupling: reading the murphy velocity and vorticity
-    nekrs::couplingRead(dt);
+    nekrs::couplingRead(dt);   // Has to be done here so mesh has moved
     
     int corrector = 1;
     bool converged = false;

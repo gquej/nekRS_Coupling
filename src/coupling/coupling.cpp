@@ -4,8 +4,8 @@ void Coupling::Set_vertices(double * vertices, int size) {
     mesh_size_ = size;
     vertices_.resize(3 * size);
     std::copy(vertices, vertices + 3 * size, vertices_.begin());
-    Data1_.resize(3*mesh_size_);
-    Data2_.resize(3*mesh_size_); 
+    //Data1_.resize(3*mesh_size_);  // Has to change if M2P here
+    //Data2_.resize(3*mesh_size_); 
 }
 
 Coupling::Coupling(std::string_view solver_name, std::string_view config_file) 
@@ -41,23 +41,23 @@ void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct
     precice_->setMeshVertices(mesh_name_, vertices_, vertex_IDs_);
 
     //setup the global data mesh
-    double dummy[3] = {0.0, 0.0, 0.0};
-    int vertex_ID_dummy[1] = {0};
+    double dummy[6] = {0.0, 0.0, 0.0, 0.0001, 0.0, 0.0};
+    int vertex_ID_dummy[2] = {0, 1};
     precice_->setMeshVertices("Global-Info", dummy, vertex_ID_dummy);
-    global_data_.resize(3);
-    global_data_[0] = 0.0;
-    global_data_[1] = 0.0;
-    global_data_[2] = 0.0;
-    global_data2_.resize(3);
-    global_data2_[0] = 0.0;
-    global_data2_[1] = 0.0;
-    global_data2_[2] = 0.0;
+    global_data_.resize(6);
+    global_data2_.resize(6);
+    for (int i = 0; i < 6; i++){
+        global_data_[i] = 0.0;
+        global_data2_[i] = 0.0;
+    }
 
     //setup the direct mesh 
     precice_->setMeshAccessRegion(direct_mesh_name_, bounding_box_);
     precice_->initialize();
     //finalize direct mesh setup
     direct_mesh_size_ = precice_->getMeshVertexSize(direct_mesh_name_);
+    Data1_.resize(3*direct_mesh_size_);  // We need this if M2P here
+    Data2_.resize(3*direct_mesh_size_);  // We need this if M2P here
     direct_vertices_.resize(3 * direct_mesh_size_);
     direct_data_.resize(3 * direct_mesh_size_);
     direct_data_cum_.resize(direct_mesh_size_);
@@ -71,8 +71,8 @@ void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct
 }
 
 void Coupling::Read(double dt) {
-    precice_->readData(mesh_name_, data1_name_, vertex_IDs_, dt, Data1_);
-    precice_->readData(mesh_name_, data2_name_, vertex_IDs_, dt, Data2_);
+    precice_->readData(direct_mesh_name_, data1_name_, direct_vertex_IDs_, dt, Data1_); // Changed to direct mesh and vertex IDs for M2P here
+    precice_->readData(direct_mesh_name_, data2_name_, direct_vertex_IDs_, dt, Data2_);
 }
 
 void Coupling::Write() {    
@@ -80,7 +80,7 @@ void Coupling::Write() {
     precice_->writeData(direct_mesh_name_, direct_data_name_cum_, direct_vertex_IDs_, direct_data_cum_);
     precice_->writeData(mesh_name_, direct_data_name2_, vertex_IDs_, direct_data2_);
     precice_->writeData(mesh_name_, direct_data_name3_, vertex_IDs_, direct_data3_);
-    int global_vertex_ID[1] = {0};
+    int global_vertex_ID[2] = {0, 1};
     precice_->writeData("Global-Info", "Position", global_vertex_ID, global_data_);
     precice_->writeData("Global-Info", "Orientation", global_vertex_ID, global_data2_);
 }
