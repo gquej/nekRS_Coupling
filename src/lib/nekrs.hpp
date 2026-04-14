@@ -47,7 +47,7 @@ bool runStep(std::function<bool(int)> convergenceCheck, int corrector);
 bool runStep(int corrector);
 double finishStep();
 bool stepConverged();
-void couplingRead (double dt);
+void couplingRead(double time, double dt, double coupling_max_dt, bool startOfCouplingWindow);
 double couplingWindowMeasurement(double coupling_max_dt);
 void couplingWrite(double dt_MURPHY);
 void couplingAdvance(double dt);

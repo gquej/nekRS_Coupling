@@ -582,8 +582,8 @@ int main(int argc, char** argv)
 
     nekrs::initStep(time, dt, tStep);
 
-    //Coupling: reading the murphy velocity and vorticity
-    nekrs::couplingRead(dt);   // Has to be done here so mesh has moved
+    //Coupling: read only once per coupling window and interpolate locally each step
+    nekrs::couplingRead(time, dt, coupling_max_dt, window_measurment > 0.0);
     
     int corrector = 1;
     bool converged = false;

@@ -36,6 +36,13 @@ static int enforceLastStep = 0;
 static int enforceOutputStep = 0;
 static bool initialized = false;
 static bool startOfWindow = true;
+static bool couplingWindowStateInitialized = false;
+static double couplingWindowT0 = 0.0;
+static double couplingWindowT1 = 0.0;
+static std::vector<double> couplingData1Prev;
+static std::vector<double> couplingData2Prev;
+static std::vector<double> couplingData1Next;
+static std::vector<double> couplingData2Next;
 
 namespace nekrs {
 
@@ -974,13 +981,63 @@ void M2Pinterp(nrs_t *nrs)
   }
 }
 
-void couplingRead (double dt) {
-  nrs->coupling->Read(dt);
+void couplingRead(double time, double dt, double coupling_max_dt, bool startOfCouplingWindow)
+{
+  Coupling *coupling = nrs->coupling;
+
+  if (startOfCouplingWindow) {
+    if (!couplingWindowStateInitialized) {
+      coupling->Read(0.0);
+      const int nData = 3 * coupling->direct_mesh_size();
+      couplingData1Prev.resize(nData);
+      couplingData2Prev.resize(nData);
+      std::copy(coupling->Get_data1(), coupling->Get_data1() + nData, couplingData1Prev.begin());
+      std::copy(coupling->Get_data2(), coupling->Get_data2() + nData, couplingData2Prev.begin());
+      couplingData1Next.resize(nData);
+      couplingData2Next.resize(nData);
+      couplingWindowStateInitialized = true;
+    }
+
+    if (!couplingData1Next.empty()) {
+      couplingData1Prev = couplingData1Next;
+      couplingData2Prev = couplingData2Next;
+    }
+
+    coupling->Read(coupling_max_dt);
+    const int nData = 3 * coupling->direct_mesh_size();
+    std::copy(coupling->Get_data1(), coupling->Get_data1() + nData, couplingData1Next.begin());
+    std::copy(coupling->Get_data2(), coupling->Get_data2() + nData, couplingData2Next.begin());
+
+    couplingWindowT0 = time;
+    couplingWindowT1 = time + coupling_max_dt;
+  }
+
+  const double denom = couplingWindowT1 - couplingWindowT0;
+  double alpha = 0.0;
+  if (denom > 0.0) {
+    alpha = (time+dt - couplingWindowT0) / denom;
+  }
+  if (alpha < 0.0)
+    alpha = 0.0;
+  if (alpha > 1.0)
+    alpha = 1.0;
+  //printf("Time, alpha, T0, T1: %f, %f, %f, %f\n", time, alpha, couplingWindowT0, couplingWindowT1);
+  const int nData = 3 * coupling->direct_mesh_size();
+  double *VPM_v = coupling->Get_data1();
+  double *VPM_omega = coupling->Get_data2();
+  for (int i = 0; i < nData; ++i) {
+    VPM_v[i] = (1.0 - alpha) * couplingData1Prev[i] + alpha * couplingData1Next[i];
+    VPM_omega[i] = (1.0 - alpha) * couplingData2Prev[i] + alpha * couplingData2Next[i];
+  }
+
+  //printf("Reset values before M2P interpolation...\n");
   nrs->interpval1.assign(nrs->interpval1.size(), 0.0); // Reset interpolation values before M2P
   nrs->interpval2.assign(nrs->interpval2.size(), 0.0); // Reset interpolation values before M2P
+  //printf("Read/interpolation done, starting M2P interpolation...\n");
   M2Pinterp(nrs);
   nrs->o_coupling_data1.copyFrom(nrs->interpval1.data()); // This will have to change if M2P here
   nrs->o_coupling_data2.copyFrom(nrs->interpval2.data()); // Replaced coupling->Get_data2() with nrs->interpval2 for M2P
+  //printf("M2P interpolation done and data copied to device.\n");
 }
 
 double couplingWindowMeasurement(double coupling_max_dt) {
@@ -1024,7 +1081,7 @@ void couplingWrite(double dt_MURPHY) {
     yp = (*vertices)[3 * i + 1];
     zp = (*vertices)[3 * i + 2];
     // Hardcoded for cylinder body here (L = D)
-    dist = sqrt((xp-nrs->position[0])*(xp-nrs->position[0]) + (yp-nrs->position[1])*(yp-nrs->position[1])); 
+    
     if (nrs->couplingMask[i] == 1) {
       vx = nrs->velocity[0] + nrs->omega[1]*(zp-nrs->position[2]) - nrs->omega[2]*(yp-nrs->position[1]);
       vy = nrs->velocity[1] + nrs->omega[2]*(xp-nrs->position[0]) - nrs->omega[0]*(zp-nrs->position[2]);
