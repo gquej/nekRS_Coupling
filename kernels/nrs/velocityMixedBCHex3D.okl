@@ -62,7 +62,8 @@
     @ restrict const dfloat *pos,
     @ restrict const dfloat *orientation,
     @ restrict const dfloat *vel,
-    @ restrict const dfloat *omega)
+    @ restrict const dfloat *omega,
+    @ restrict const int *isMobileWall)
 {
 //The following arrays contain the necessry info to treat each face 
 int list_ind_beg[6] = {1, 1, 0, 0, 1, 0}; //beginning index to compute the derivative in the normal direction
@@ -90,9 +91,21 @@ const int sk = e * p_Nfp * p_Nfaces + n;
 const dlong sid = e * p_Nfaces * p_Nfp + n;
 const dlong idM = vmapM[sk];
 const dlong bcType = EToB[f + p_Nfaces * e];
-
+const dlong bid = EToBM[f + p_Nfaces * e];
 if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
+    if ((bid > 0) && isMobileWall[bid - 1]) { // if this is a mobile wall, we treat it as a "mv" type
+        //--------------------------------------------------------------------------------------------------------//
+        //---------------------------- Impose the velocity at the wall given its kinematics ----------------------//
 
+        // u = ux + omega_y * (z-zcenter) - omega_z * (y-ycenter)
+        // v = uy + omega_z * (x-xcenter) - omega_x * (z-zcenter)
+        // w = uz + omega_x * (y-ycenter) - omega_y * (x-xcenter)
+        
+        UH[idM + 0 * offset] = vel[0] + omega[1] * (z[idM] - pos[2]) - omega[2] * (y[idM] - pos[1]);
+        UH[idM + 1 * offset] = vel[1] + omega[2] * (x[idM] - pos[0]) - omega[0] * (z[idM] - pos[2]);
+        UH[idM + 2 * offset] = vel[2] + omega[0] * (y[idM] - pos[1]) - omega[1] * (x[idM] - pos[0]);
+        //printf("Imposing %f %f at (%f, %f)\n", UH[idM + 0 * offset], UH[idM + 1 * offset], x[idM], y[idM]);
+    } else {  // Coupling boundary condition
     //--------------------------------------------------------------------------------------------------------//
     //----------------------------- Quantities relative to the first node of the SE --------------------------//
 
@@ -302,6 +315,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     }*/
 }
 }
+}
 @barrier();
 }
 
@@ -329,7 +343,7 @@ const dlong idM = vmapM[sk];
 const dlong bcType = EToB[f + p_Nfaces * e];
 
 if (bcType > 0) {
-if (bcType == p_bcTypeW) {
+if (bcType == p_bcTypeW) {  // Deprecated !
 
     //--------------------------------------------------------------------------------------------------------//
     //---------------------------- Impose the velocity at the wall given its kinematics ----------------------//
@@ -343,6 +357,7 @@ UH[idM + 0 * offset] = vel[0] + omega[1] * (z[idM] - pos[2]) - omega[2] * (y[idM
 UH[idM + 1 * offset] = vel[1] + omega[2] * (x[idM] - pos[0]) - omega[0] * (z[idM] - pos[2]);
 UH[idM + 2 * offset] = vel[2] + omega[0] * (y[idM] - pos[1]) - omega[1] * (x[idM] - pos[0]);
 //printf("Imposing %f %f at (%f, %f)\n", UH[idM + 0 * offset], UH[idM + 1 * offset], x[idM], y[idM]);
+//printf("vel, omega = %f, %f, %f, %f, %f, %f\n", vel[0], vel[1], vel[2], omega[0], omega[1], omega[2]);
 }
 }
 }

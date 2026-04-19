@@ -463,6 +463,29 @@ void nrsSetup(MPI_Comm comm, setupAide &options, nrs_t *nrs)
         device.malloc(mesh->Nelements * mesh->Nfaces * sizeof(int), nrs->EToBMeshVelocity);
   }
 
+  // Build isMobileWall from the raw velocity boundaryTypeMap string.
+  // Do not use bcMap::text() here because "mv" is normalized to codedFixedValue.
+  const int nbrBIDs = bcMap::size("velocity");
+  nrs->isMobileWall = (int *)calloc(nbrBIDs, sizeof(int));
+
+  std::string mobileMask;
+  platform->options.getArgs("VELOCITY MOBILE WALL MASK", mobileMask);
+  auto mobileMaskList = serializeString(mobileMask, ',');
+  if (static_cast<int>(mobileMaskList.size()) == nbrBIDs) {
+    for (int bID = 1; bID <= nbrBIDs; ++bID) {
+      const auto &entry = mobileMaskList[bID - 1];
+      nrs->isMobileWall[bID - 1] = (entry == "1") ? 1 : 0;
+      if (entry =="1") printf("VELOCITY MOBILE WALL MASK: boundary ID %d is %s\n", bID, nrs->isMobileWall[bID - 1] ? "mobile" : "not mobile");
+    }
+  }
+
+  if (platform->comm.mpiRank == 0 && !mobileMaskList.empty() && static_cast<int>(mobileMaskList.size()) != nbrBIDs) {
+    printf("WARNING setup: VELOCITY MOBILE WALL MASK has %d entries, expected %d\n",
+           (int) mobileMaskList.size(),
+           nbrBIDs);
+  }
+  nrs->o_isMobileWall = device.malloc(nbrBIDs * sizeof(int), nrs->isMobileWall);
+
   if (platform->options.compareArgs("VELOCITY REGULARIZATION METHOD", "HPFRT")) {
 
     nrs->filterNc = -1;

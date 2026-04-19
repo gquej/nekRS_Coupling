@@ -576,7 +576,7 @@ int main(int argc, char** argv)
     if (window_measurment > 0.0){
       dt_MURPHY = window_measurment;
     }
-    printf("Time window according to NEK : %f\n", dt_MURPHY);
+    //printf("Time window according to NEK : %f\n", dt_MURPHY);
     //dt = nekrs::coupling_dt(coupling_max_dt, dt, tol_floor_dt);
     //----------------------------------------------------------------------------
 

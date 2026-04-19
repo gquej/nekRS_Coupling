@@ -151,7 +151,8 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
                                    nrs->o_position,
                                    nrs->o_orientation,
                                    nrs->o_velocity,
-                                   nrs->o_omega);
+                                   nrs->o_omega,
+                                   nrs->o_isMobileWall);
 
     if (sweep == 0)
       oogs::startFinish(platform->o_mempool.slice0,

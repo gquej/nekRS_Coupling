@@ -302,7 +302,8 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
   for (dlong e = 0; e < N_elements; e++) {
     for (int f = 0; f < p_Nfaces; f++) {
       const dlong bcType = nrs->EToB[f + p_Nfaces * e];
-      if (bcType == 3) {
+      const dlong bid = mesh->EToB[f + p_Nfaces * e];
+      if ((bcType == 3) && (bid > 0) && (!nrs->isMobileWall[(int)bid-1])) {
         boundary_points_counter += p_Nfp * 2; //factor 2 is to count also the interior layer of points when imposing omega on the second spectral point
       }
     }
@@ -319,7 +320,8 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
   for (dlong e = 0; e < N_elements; e++) {
     for (int f = 0; f < p_Nfaces; f++) {
       const dlong bcType = nrs->EToB[f + p_Nfaces * e];
-      if (bcType == 3) {
+      const dlong bid = mesh->EToB[f + p_Nfaces * e];
+      if ((bcType == 3) && (bid > 0) && (!nrs->isMobileWall[(int)bid-1])) {
         for (int m = 0; m < p_Nfp; ++m) {
           const int n = m + f * p_Nfp;
           const int sk = e * p_Nfp * p_Nfaces + n;

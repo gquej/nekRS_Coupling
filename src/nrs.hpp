@@ -135,8 +135,10 @@ struct nrs_t {
 
   int *EToB;
   int *EToBMeshVelocity;
+  int *isMobileWall;
   occa::memory o_EToB;
   occa::memory o_EToBMeshVelocity;
+  occa::memory o_isMobileWall;
 
   occa::memory o_EToBVVelocity;
   occa::memory o_EToBVMeshVelocity;

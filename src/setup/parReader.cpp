@@ -2011,6 +2011,19 @@ void parseVelocitySection(const int rank, setupAide &options, inipp::Ini *par)
   std::string v_bcMap;
   if (par->extract("velocity", "boundarytypemap", v_bcMap)) {
     options.setArgs("VELOCITY BOUNDARY TYPE MAP", v_bcMap);
+    
+    // Precompute a mobile-wall mask (comma-separated 0/1) aligned with boundarytypemap entries.
+    auto vBcList = serializeString(v_bcMap, ',');
+    lowerCase(vBcList);
+    std::string mobileMask;
+    for (int i = 0; i < (int) vBcList.size(); ++i) {
+      const auto &entry = vBcList[i];
+      const bool isMobile = (entry == "mv" || entry == "codedfixedvalue+moving");
+      if (i)
+        mobileMask += ",";
+      mobileMask += (isMobile ? "1" : "0");
+    }
+    options.setArgs("VELOCITY MOBILE WALL MASK", mobileMask);
   }
 
   double rho;
