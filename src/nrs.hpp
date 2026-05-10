@@ -41,7 +41,9 @@ struct nrs_t {
   dfloat L = 1.0; // Characteristic length
   dfloat position[3] = {0.0, 0.0, 0.0};
   dfloat position0[3] = {0.0, 0.0, 0.0};
+  dfloat position_new[3] = {0.0, 0.0, 0.0};
   dfloat orientation[3] = {0.0, 0.0, 0.0};
+  dfloat orientation_new[3] = {0.0, 0.0, 0.0};
   dfloat velocity[3] = {0.0, 0.0, 0.0};
   dfloat omega[3] = {0.0, 0.0, 0.0};
   float oldforce[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
@@ -49,6 +51,9 @@ struct nrs_t {
   occa::memory o_orientation;
   occa::memory o_velocity;
   occa::memory o_omega;
+  int dynamicSolve = 0;
+  int FSI_iter_start = 0;
+  int FSI_iter_dump = 0;
 
   static constexpr double targetTimeBenchmark {0.2};
 

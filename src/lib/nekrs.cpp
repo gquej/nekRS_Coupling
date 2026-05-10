@@ -655,6 +655,11 @@ int outputStep(double time, int tStep)
     enforceOutputStep = 0;
     return 1;
   }
+
+  if (nrs->dynamicSolve && (tStep >= nrs->FSI_iter_start) && (tStep % nrs->FSI_iter_dump == 0)) {
+    outputStep = 1;
+  }
+
   return outputStep;
 }
 
@@ -1181,6 +1186,9 @@ void readCouplingParameters(std::string *config_file, bool *periodic_dir, double
   platform->par->extract("casedata", "periodicYmax", periodic_bounds[3]);
   platform->par->extract("casedata", "periodicZmin", periodic_bounds[4]);
   platform->par->extract("casedata", "periodicZmax", periodic_bounds[5]);
+  platform->par->extract("casedata", "DynamicSolve", nrs->dynamicSolve);
+  platform->par->extract("casedata", "FSI_iter_start", nrs->FSI_iter_start);
+  platform->par->extract("casedata", "FSI_iter_dump", nrs->FSI_iter_dump);
 } 
 }//namespace nekrs
 

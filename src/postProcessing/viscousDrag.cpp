@@ -154,8 +154,8 @@ void postProcessing::integrateDynamics(nrs_t *nrs, float dragV[6]) {
   */
   
   mesh_t *mesh = nrs->meshV;
-  dfloat * pos = nrs->position;
-  dfloat * orientation = nrs->orientation;
+  dfloat * pos = nrs->position_new;
+  dfloat * orientation = nrs->orientation_new;
   dfloat * vel = nrs->velocity;
   dfloat * omega = nrs->omega;
   float * oldforce = nrs->oldforce;
@@ -167,7 +167,7 @@ void postProcessing::integrateDynamics(nrs_t *nrs, float dragV[6]) {
   for (int i = 0; i < 3; i++) {
     //pos[i] += vel[i] * dt;         // Explicit Euler for position update (use current velocity)
     dfloat oldvel = vel[i];
-    vel[i] += (dragV[i] + oldforce[i]) / (2.0*m) * dt;   // Implicit Euler (F is at n+1 as flow is at n+1 in post-processing) or Explicit if oldforce
+    vel[i] += (3.0*dragV[i] - oldforce[i]) / (2.0*m) * dt;   // Implicit Euler (F is at n+1 as flow is at n+1 in post-processing) or Explicit if oldforce
     pos[i] += (oldvel + vel[i]) / 2.0 * dt;         // Implicit Euler for position update (use updated velocity)
   } 
   std::vector<std::vector<dfloat>> Q(3, std::vector<dfloat>(3));
@@ -223,7 +223,7 @@ void postProcessing::integrateDynamics(nrs_t *nrs, float dragV[6]) {
   float omegaBody[3] = {0.0, 0.0, 0.0};
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 3; j++) {
-      trqBody[i] += Q[i][j] * (dragV[j + 3] + oldforce[j + 3])/2.0; // dragV[3], dragV[4], dragV[5] are torque components
+      trqBody[i] += Q[i][j] * (3.0*dragV[j + 3] - oldforce[j + 3])/2.0; // dragV[3], dragV[4], dragV[5] are torque components
       omegaBody[i] += Q[i][j] * omega[j]; // Transform angular velocity to body frame
     }
   }
@@ -252,8 +252,8 @@ void postProcessing::integrateDynamics(nrs_t *nrs, float dragV[6]) {
     nrs->oldforce[i] = dragV[i];   // For Euler explicit or Crank-Nicolson
   }
 
-  nrs->o_position.copyFrom(nrs->position);
-  nrs->o_orientation.copyFrom(nrs->orientation);
+  nrs->o_position.copyFrom(nrs->position_new);
+  nrs->o_orientation.copyFrom(nrs->orientation_new);
   nrs->o_velocity.copyFrom(nrs->velocity);
   nrs->o_omega.copyFrom(nrs->omega);
 }

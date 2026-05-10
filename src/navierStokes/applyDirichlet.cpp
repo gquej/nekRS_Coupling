@@ -74,8 +74,8 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
 
   mesh_t *mesh = nrs->meshV;
 
-  nrs->o_position.copyFrom(nrs->position);
-  nrs->o_orientation.copyFrom(nrs->orientation);
+  nrs->o_position.copyFrom(nrs->position_new);
+  nrs->o_orientation.copyFrom(nrs->orientation_new);
   nrs->o_velocity.copyFrom(nrs->velocity);
   nrs->o_omega.copyFrom(nrs->omega);
   // int p_Nfaces = 6;
