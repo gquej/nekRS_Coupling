@@ -245,6 +245,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     double un_vpm = coupling_data1[3 * id_coupling + 0 ] * nx + coupling_data1[3 * id_coupling + 1 ] * ny + coupling_data1[3 * id_coupling + 2 ] * nz;
     //retrieve both tangential vorticity components at the first interior points, from the vpm value
     id_coupling = coupling_vmap[idM_dec];
+    const dfloat wn_vpm  = coupling_data2[3 * id_coupling + 0 ] * nx + coupling_data2[3 * id_coupling + 1 ]  * ny + coupling_data2[3 * id_coupling + 2 ]  * nz; //omega_n
     const dfloat wt1_vpm = coupling_data2[3 * id_coupling + 0 ] * t1x + coupling_data2[3 * id_coupling + 1 ] * t1y + coupling_data2[3 * id_coupling + 2 ] * t1z; //omega_t1
     const dfloat wt2_vpm = coupling_data2[3 * id_coupling + 0 ] * t2x + coupling_data2[3 * id_coupling + 1 ] * t2y + coupling_data2[3 * id_coupling + 2 ] * t2z; //omega_t2
 
@@ -280,11 +281,102 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     const dfloat wsol = (  M11*M22*B3 - M11*M32*B2 - M12*M21*B3 + M12*M31*B2 + M21*M32*B1 - M22*M31*B1) / denom;
 
     //--------------------------------------------------------------------------------------------------------//
+    //-------------------------------- Impose all vorticity components (Least squares) -----------------------//
+    // See guide for NW BC's for detail.
+    // We impose U nx + V ny + W nz = u_n(vpm), and minimize the 2-norm error on the vorticity (3 equations, 2 independent unknows).
+    // Depending on whether nx, ny or nz are nonzero (we need to divide by those at some point), we either isolate U, V or W in the normal velocity constraint and replace in the 3 vorticity equations.
+    // This yields Ax = b, with A (3 x 2). We then solve x_LS = (A^T A)^(-1) A^T b to minimize ||Ax-b||^2.
+
+    const dfloat rhs_n = wn_vpm  - nx  * wx  - ny * wy  - nz * wz;
+    const dfloat rhs_t = wt1_vpm - t1x * wx - t1y * wy - t1z * wz;
+    const dfloat rhs_b = wt2_vpm - t2x * wx - t2y * wy - t2z * wz;
+
+    //Write the coefficients of the overdetermined system
+    //There is at least one component of the norm which is >= sqrt(3)/3 = 0.57735...
+    const dfloat min_vector_comp = 0.5; // At least one vector comp is greater than 0.5
+    dfloat a11, a12, a21, a22, a31, a32; // components of A
+    dfloat b1,b2,b3; // components of b
+
+    if (fabs(nx) > min_vector_comp) {
+        a11 = nz * jac[0 + off][0] - nx * jac[0 + off][2] - (ny / nx) * (ny * jac[0 + off][2] - nz * jac[0 + off][1]);
+        a12 = nx * jac[0 + off][1] - ny * jac[0 + off][0] - (nz / nx) * (ny * jac[0 + off][2] - nz * jac[0 + off][1]);
+
+        a21 = t1z * jac[0 + off][0] - t1x * jac[0 + off][2] - (ny / nx) * (t1y * jac[0 + off][2] - t1z * jac[0 + off][1]);
+        a22 = t1x * jac[0 + off][1] - t1y * jac[0 + off][0] - (nz / nx) * (t1y * jac[0 + off][2] - t1z * jac[0 + off][1]);
+
+        a31 = t2z * jac[0 + off][0] - t2x * jac[0 + off][2] - (ny / nx) * (t2y * jac[0 + off][2] - t2z * jac[0 + off][1]);
+        a32 = t2x * jac[0 + off][1] - t2y * jac[0 + off][0] - (nz / nx) * (t2y * jac[0 + off][2] - t2z * jac[0 + off][1]);
+
+        b1 = rhs_n / D21 - (ny * jac[0 + off][2] - nz * jac[0 + off][1]) * un_vpm / nx;
+        b2 = rhs_t / D21 - (t1y * jac[0 + off][2] - t1z * jac[0 + off][1]) * un_vpm / nx;
+        b3 = rhs_b / D21 - (t2y * jac[0 + off][2] - t2z * jac[0 + off][1]) * un_vpm / nx;
+    } else if (fabs(ny) > min_vector_comp) {
+        a11 = ny * jac[0 + off][2] - nz * jac[0 + off][1] - (nx / ny) * (nz * jac[0 + off][0] - nx * jac[0 + off][2]);
+        a12 = nx * jac[0 + off][1] - ny * jac[0 + off][0] - (nz / ny) * (nz * jac[0 + off][0] - nx * jac[0 + off][2]);
+
+        a21 = t1y * jac[0 + off][2] - t1z * jac[0 + off][1] - (nx / ny) * (t1z * jac[0 + off][0] - t1x * jac[0 + off][2]);
+        a22 = t1x * jac[0 + off][1] - t1y * jac[0 + off][0] - (nz / ny) * (t1z * jac[0 + off][0] - t1x * jac[0 + off][2]);
+
+        a31 = t2y * jac[0 + off][2] - t2z * jac[0 + off][1] - (nx / ny) * (t2z * jac[0 + off][0] - t2x * jac[0 + off][2]);
+        a32 = t2x * jac[0 + off][1] - t2y * jac[0 + off][0] - (nz / ny) * (t2z * jac[0 + off][0] - t2x * jac[0 + off][2]);
+
+        b1 = rhs_n / D21 - (nz * jac[0 + off][0] - nx * jac[0 + off][2]) * un_vpm / ny;
+        b2 = rhs_t / D21 - (t1z * jac[0 + off][0] - t1x * jac[0 + off][2]) * un_vpm / ny;
+        b3 = rhs_b / D21 - (t2z * jac[0 + off][0] - t2x * jac[0 + off][2]) * un_vpm / ny;
+    } else {
+        a11 = ny * jac[0 + off][2] - nz * jac[0 + off][1] - (nx / nz) * (nx * jac[0 + off][1] - ny * jac[0 + off][0]);
+        a12 = nz * jac[0 + off][0] - nx * jac[0 + off][2] - (ny / nz) * (nx * jac[0 + off][1] - ny * jac[0 + off][0]);
+
+        a21 = t1y * jac[0 + off][2] - t1z * jac[0 + off][1] - (nx / nz) * (t1x * jac[0 + off][1] - t1y * jac[0 + off][0]);
+        a22 = t1z * jac[0 + off][0] - t1x * jac[0 + off][2] - (ny / nz) * (t1x * jac[0 + off][1] - t1y * jac[0 + off][0]);
+
+        a31 = t2y * jac[0 + off][2] - t2z * jac[0 + off][1] - (nx / nz) * (t2x * jac[0 + off][1] - t2y * jac[0 + off][0]);
+        a32 = t2z * jac[0 + off][0] - t2x * jac[0 + off][2] - (ny / nz) * (t2x * jac[0 + off][1] - t2y * jac[0 + off][0]);
+
+        b1 = rhs_n / D21 - (nx * jac[0 + off][1] - ny * jac[0 + off][0]) * un_vpm / nz;
+        b2 = rhs_t / D21 - (t1x * jac[0 + off][1] - t1y * jac[0 + off][0]) * un_vpm / nz;
+        b3 = rhs_b / D21 - (t2x * jac[0 + off][1] - t2y * jac[0 + off][0]) * un_vpm / nz;
+    }
+    // Compute x_LS = (A^T A)^(-1) A^T b
+    const dfloat A = a11 * a11 + a21 * a21 + a31 * a31;
+    const dfloat B = a11 * a12 + a21 * a22 + a31 * a32;
+    const dfloat C = a12 * a12 + a22 * a22 + a32 * a32; 
+    const dfloat D = A * C - B * B;
+
+    const dfloat sol_a = (C/D) * (a11 * b1 + a21 * b2 + a31 * b3) - (B/D) * (a12 * b1 + a22 * b2 + a32 * b3);
+    const dfloat sol_b = -(B/D) * (a11 * b1 + a21 * b2 + a31 * b3) + (A/D) * (a12 * b1 + a22 * b2 + a32 * b3);
+    dfloat U_LS,V_LS,W_LS;
+
+    if (fabs(nx) > min_vector_comp) {
+        V_LS =  sol_a;
+        W_LS =  sol_b;
+        U_LS = (un_vpm - ny * V_LS - nz * W_LS) / nx;
+    } else if (fabs(ny) > min_vector_comp) {
+        U_LS =  sol_a;
+        W_LS =  sol_b;
+        V_LS = (un_vpm - nx * U_LS - nz * W_LS) / ny;
+    } else {
+        U_LS =  sol_a;
+        V_LS =  sol_b;
+        W_LS = (un_vpm - nx * U_LS - ny * V_LS) / nz;
+    }
+
+
+
+    //--------------------------------------------------------------------------------------------------------//
     //------------------------------------- Finally imposing the value --------------------------------------//
 
-    UH[idM + 0 * offset] = usol;
-    UH[idM + 1 * offset] = vsol;
-    UH[idM + 2 * offset] = wsol;
+    const bool impose_LS_value = true;
+    if (impose_LS_value) {                 // impose 3 comp of omega in the sense of the least sqaures
+        UH[idM + 0 * offset] = U_LS;
+        UH[idM + 1 * offset] = V_LS;
+        UH[idM + 2 * offset] = W_LS;
+    } else {                               // impose 2 tangential components of omega
+        UH[idM + 0 * offset] = usol;
+        UH[idM + 1 * offset] = vsol;
+        UH[idM + 2 * offset] = wsol;
+    }
+    
     
 }
 }
