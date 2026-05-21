@@ -56,10 +56,11 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
                    std::string_view mesh_name, std::string_view direct_mesh_name,
                    std::string_view data_name, std::string_view data2_name,
                    std::string_view direct_data_name, std::string_view direct_data_name_cum,
-                   double tol_bb, bool *periodic_dir, double * periodic_bounds);
+                   double tol_bb, bool *periodic_dir, double * periodic_bounds,
+                   int M_VPM, bool staggered);
 void couplingFinalize();
 bool isCouplingOngoing();
-void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds);
+void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds, int *M_VPM, bool *staggered);
 }
 
 #endif

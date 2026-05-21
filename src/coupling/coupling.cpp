@@ -20,7 +20,8 @@ Coupling::Coupling(std::string_view solver_name, std::string_view config_file)
 
 }
 
-void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct_mesh_name, precice::string_view data_name, double *bounding_box, precice::string_view data2_name, precice::string_view direct_data_name, precice::string_view direct_data_name_cum) {
+void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct_mesh_name, precice::string_view data_name, double *bounding_box, precice::string_view data2_name, precice::string_view direct_data_name, precice::string_view direct_data_name_cum,
+                   bool staggered, int M_VPM) {
     mesh_name_ = mesh_name;
     direct_mesh_name_ = direct_mesh_name;
     data1_name_ = data_name;
@@ -32,6 +33,8 @@ void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct
     {
         bounding_box_[i] = bounding_box[i];
     }
+    staggered_ = staggered;
+    M_VPM_ = M_VPM;
     
     //setup this mesh
     vertices_.resize(3*mesh_size_);

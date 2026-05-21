@@ -226,7 +226,8 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
   std::string_view mesh_name, std::string_view direct_mesh_name,
   std::string_view data_name, std::string_view data2_name,
   std::string_view direct_data_name, std::string_view direct_data_name_cum,
-  double tol_bb, bool *periodic_dir, double * periodic_bounds) {
+  double tol_bb, bool *periodic_dir, double * periodic_bounds,
+  int M_VPM, bool staggered) {
   mesh_t *mesh = nrs->meshV;
   int p_Nfaces = mesh->Nfaces;
   int p_Nfp = mesh->Nfp;
@@ -406,24 +407,50 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
 
   nrs->o_coupling_bbox = platform->device.malloc(6 * sizeof(dlong), nrs->coupling_bbox);
   nrs->o_coupling_bbox.copyFrom(nrs->coupling_bbox);
-  coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name, direct_data_name_cum);
+  coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name, direct_data_name_cum, staggered, M_VPM);
   
   //setting up the interpolator
 
   const int np = coupling->direct_mesh_size();
   const auto offset = np;
   nrs->interpolator = new pointInterpolation_t(nrs);
-  nrs->o_fields1D = platform->device.malloc(3 * offset * sizeof(dfloat));
+  int n_VPM_mesh;
+  if (staggered) n_VPM_mesh = 3;
+  else n_VPM_mesh = 1;
+  nrs->o_fields1D = platform->device.malloc(n_VPM_mesh * 3 * offset * sizeof(dfloat));
   std::vector<dfloat> xp, yp, zp;
   
   const std::vector<dfloat> *vertices = coupling->direct_vertices();
-
-  for (int i = 0; i < np; i++) {
-    xp.push_back((*vertices)[3 * i + 0]);
-    yp.push_back((*vertices)[3 * i + 1]);
-    zp.push_back((*vertices)[3 * i + 2]);
+  const double h_VPM =  1. /((double) M_VPM);
+  if (staggered) {
+    // for u
+    for (int i = 0; i < np; i++) {
+      xp.push_back((*vertices)[3 * i + 0]);
+      yp.push_back((*vertices)[3 * i + 1] + 0.5 * h_VPM);
+      zp.push_back((*vertices)[3 * i + 2] + 0.5 * h_VPM);
+    }
+    // for v
+    for (int i = 0; i < np; i++) {
+      xp.push_back((*vertices)[3 * i + 0] + 0.5 * h_VPM);
+      yp.push_back((*vertices)[3 * i + 1]);
+      zp.push_back((*vertices)[3 * i + 2] + 0.5 * h_VPM);
+    }
+    // for w
+    for (int i = 0; i < np; i++) {
+      xp.push_back((*vertices)[3 * i + 0] + 0.5 * h_VPM);
+      yp.push_back((*vertices)[3 * i + 1] + 0.5 * h_VPM);
+      zp.push_back((*vertices)[3 * i + 2]);
+    }
+    
+  } else {
+    for (int i = 0; i < np; i++) {
+      xp.push_back((*vertices)[3 * i + 0]);
+      yp.push_back((*vertices)[3 * i + 1]);
+      zp.push_back((*vertices)[3 * i + 2]);
+    }
   }
-  nrs->interpolator->setPoints(np, xp.data(), yp.data(), zp.data());
+
+  nrs->interpolator->setPoints(n_VPM_mesh * np, xp.data(), yp.data(), zp.data());
   nrs->interpolator->find();
 }
 
@@ -750,21 +777,37 @@ void couplingWrite() {
   const int np = nrs->coupling->direct_mesh_size();
   const auto offset = np;
 
+  int n_VPM_mesh;
+  if (nrs->coupling->staggered()) n_VPM_mesh = 3;
+  else n_VPM_mesh = 1;
   nrs->interpolator->eval(Nfields,   // evaluation of the field o_U at the previously defined points, stored in o_fields1D
     nrs->fieldOffset, 
     nrs->o_U, 
-    offset, 
+    n_VPM_mesh * np, 
     nrs->o_fields1D);
 
-  std::vector<dfloat> U_eval(Nfields * np);
+  std::vector<dfloat> U_eval(n_VPM_mesh * np * Nfields);
   nrs->o_fields1D.copyTo(U_eval.data());
   std::vector<double> * direct_data = nrs->coupling->direct_data();
   std::vector<double> * direct_data_cum = nrs->coupling->direct_data_cum();
-  for (int i = 0; i < np; i++) {
-    (*direct_data)[3 * i + 0] = U_eval[i + 0 * offset];
-    (*direct_data)[3 * i + 1] = U_eval[i + 1 * offset];
-    (*direct_data)[3 * i + 2] = U_eval[i + 2 * offset];
-    (*direct_data_cum)[i] = 1.;
+  if (nrs->coupling->staggered()) {
+    for (int i = 0; i < np; i++) {
+      (*direct_data)[3 * i + 0] = U_eval[i + 0 * np];
+      (*direct_data)[3 * i + 1] = U_eval[3 * np + i + 1 * np];
+      (*direct_data)[3 * i + 2] = U_eval[6 * np + i + 2 * np];
+      (*direct_data_cum)[i] = 1.;
+      
+    }
+  } else {
+    for (int i = 0; i < np; i++) {
+      (*direct_data)[3 * i + 0] = U_eval[i + 0 * np];
+      (*direct_data)[3 * i + 1] = U_eval[i + 1 * np];
+      (*direct_data)[3 * i + 2] = U_eval[i + 2 * np];
+      (*direct_data_cum)[i] = 1.;
+    }
+  }
+  if (platform->comm.mpiRank == 0) {
+    printf("Interpolating nek velocity onto murphy vertices, and writing to preCICE\n");
   }
 
   nrs->coupling->Write();
@@ -797,7 +840,7 @@ double coupling_dt(double coupling_max_dt, double dt_solver, double tol_floor_dt
 
 bool isCouplingOngoing() {return nrs->coupling->IsCouplingOngoing(); }
 
-void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds) {
+void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds, int *M_VPM, bool *staggered) {
   platform->par->extract("casedata", "preciceConfig", *config_file);
   platform->par->extract("casedata", "periodicX", periodic_dir[0]);
   platform->par->extract("casedata", "periodicY", periodic_dir[1]);
@@ -808,6 +851,8 @@ void readCouplingParameters(std::string *config_file, bool *periodic_dir, double
   platform->par->extract("casedata", "periodicYmax", periodic_bounds[3]);
   platform->par->extract("casedata", "periodicZmin", periodic_bounds[4]);
   platform->par->extract("casedata", "periodicZmax", periodic_bounds[5]);
+  platform->par->extract("casedata", "M_VPM", M_VPM[0]);
+  platform->par->extract("casedata", "staggered", staggered[0]);
 } 
 }//namespace nekrs
 

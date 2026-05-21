@@ -529,18 +529,24 @@ int main(int argc, char** argv)
   std::string_view data2_name = "Murphy_w";
   std::string_view direct_data_name = "Nek_u";
   std::string_view direct_data_name_cum = "Nek_cum";
-  double tol_bb = 1.e-4;
   double tol_floor_dt = 0.1; //tolerance for the coupling nek dt versus dt required by nek (coupling_dt < 1.1 * nek_dt)
   double final_step_tol = 1.e-10; //tolerance to decided whether this nek dt is the last one for the current coupling window
+  double base_tol_bb = 1.e-4;
   std::string config_file;
   bool periodic_dir[3];
   double periodic_bounds[6];
+  int M_VPM;
+  bool staggered;
   
-  nekrs::readCouplingParameters(&config_file, periodic_dir, periodic_bounds);
+  nekrs::readCouplingParameters(&config_file, periodic_dir, periodic_bounds, &M_VPM, &staggered);
+  double tol_bb;
+  if (staggered) tol_bb = base_tol_bb + 1. /((double) M_VPM);
+  else tol_bb = base_tol_bb;
+
   nekrs::couplingSetup(config_file, solver_name, mesh_name,
                       direct_mesh_name, data_name, data2_name,
                       direct_data_name, direct_data_name_cum, tol_bb,
-                      periodic_dir, periodic_bounds);
+                      periodic_dir, periodic_bounds, M_VPM, staggered);
   //------------------------------- Coupling setup -----------------------------------------------
   //----------------------------------------------------------------------------------------------
   
@@ -562,6 +568,7 @@ int main(int argc, char** argv)
     if (isLastStep) outputStep = 1;
     if (nekrs::writeInterval() < 0) outputStep = 0;
     nekrs::outputStep(outputStep);
+    if (outputStep) nekrs::outfld(time, tStep);
 
     if (tStep <= 1000) nekrs::verboseInfo(true); 
 
@@ -596,7 +603,7 @@ int main(int argc, char** argv)
         nekrs::printInfo(time, tStep, false, true);
     }
 
-    if (outputStep) nekrs::outfld(time, tStep);
+    
 
     MPI_Barrier(comm);
     const double elapsedStep = MPI_Wtime() - timeStartStep;
