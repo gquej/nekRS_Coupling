@@ -116,6 +116,30 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
                                    nrs->o_usrwrk,
                                    o_Ue,
                                    platform->o_mempool.slice0);
+    // Compute the net flux through the NW outer boundary (coming from VPM), to be used for the correction of the normal velocity 
+    const int NfpTotal = mesh->Nelements * mesh->Nfaces * mesh->Nfp;
+    const int Nblock = (NfpTotal + BLOCKSIZE - 1) / BLOCKSIZE;
+    nrs->getBCFluxKernel(mesh->Nelements,
+                  nrs->fieldOffset,
+                  nrs->o_coupling_data1,
+                  nrs->o_coupling_vmap, 
+                  mesh->o_vmapM,
+                  mesh->o_EToB,
+                  mesh->o_sgeo,
+                  nrs->o_coupling_area,
+                  nrs->o_coupling_flux,
+                  NfpTotal,
+                  nrs->o_coupling_tmp1,
+                  nrs->o_coupling_tmp2);
+
+  nrs->o_coupling_tmp1.copyTo(nrs->coupling_tmp1);
+  nrs->o_coupling_tmp2.copyTo(nrs->coupling_tmp2);
+  dfloat sbuf[2] = {0, 0};
+  for (int n = 0; n < Nblock; n++) {
+    sbuf[0] += nrs->coupling_tmp1[n];
+    sbuf[1] += nrs->coupling_tmp2[n];
+  }
+  MPI_Allreduce(MPI_IN_PLACE, sbuf, 2, MPI_DFLOAT, MPI_SUM, platform->comm.mpiComm);
 
     nrs->velocityMixedBCKernel(mesh->Nelements,
                                    nrs->fieldOffset,
@@ -143,8 +167,9 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
                                    o_Ue, 
                                    nrs->o_coupling_vmap,
                                    nrs->o_coupling_bbox,
-                                   nrs->tstep);
-
+                                   nrs->tstep,
+                                   sbuf[0], //total NW outer area
+                                   sbuf[1]); // total NW outer flux
     if (sweep == 0)
       oogs::startFinish(platform->o_mempool.slice0,
                         1 + nrs->NVfields,

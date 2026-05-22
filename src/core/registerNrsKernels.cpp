@@ -178,6 +178,10 @@ void registerNrsKernels(occa::properties kernelInfoBC)
     fileName = oklpath + "/nrs/" + kernelName + ".okl";
     platform->kernels.add(section + kernelName, fileName, kernelInfoBC);
 
+    kernelName = "getBCFlux" + suffix;
+    fileName = oklpath + "/nrs/" + kernelName + ".okl";
+    platform->kernels.add(section + kernelName, fileName, kernelInfoBC);
+
     kernelName = "velocityNeumannBC" + suffix;
     fileName = oklpath + "/nrs/" + kernelName + ".okl";
     platform->kernels.add(section + kernelName, fileName, kernelInfoBC);

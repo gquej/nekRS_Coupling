@@ -27,6 +27,15 @@ struct nrs_t {
   occa::memory o_coupling_bbox;
   pointInterpolation_t *interpolator;
   occa::memory o_fields1D;
+  //data arrays for the correction of NW outer flux
+  dfloat* coupling_flux;
+  dfloat* coupling_area;
+  dfloat* coupling_tmp1;
+  dfloat* coupling_tmp2;
+  occa::memory o_coupling_flux;
+  occa::memory o_coupling_area;
+  occa::memory o_coupling_tmp1;
+  occa::memory o_coupling_tmp2;
 
 
   static constexpr double targetTimeBenchmark {0.2};
@@ -175,7 +184,7 @@ struct nrs_t {
   occa::kernel velocityNeumannBCKernel;
   occa::kernel velocityDirichletBCKernel;
   occa::kernel velocityMixedBCKernel;
-
+  occa::kernel getBCFluxKernel;
   occa::kernel cflKernel;
 
   occa::kernel setEllipticCoeffKernel;

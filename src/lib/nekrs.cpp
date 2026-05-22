@@ -407,6 +407,18 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
 
   nrs->o_coupling_bbox = platform->device.malloc(6 * sizeof(dlong), nrs->coupling_bbox);
   nrs->o_coupling_bbox.copyFrom(nrs->coupling_bbox);
+
+  const int NfpTotal = mesh->Nelements * mesh->Nfaces * mesh->Nfp;
+  const int Nblock = (NfpTotal + BLOCKSIZE - 1) / BLOCKSIZE;
+  nrs->coupling_flux = (dfloat *)calloc(NfpTotal, sizeof(dfloat));
+  nrs->coupling_area = (dfloat *)calloc(NfpTotal, sizeof(dfloat));
+  nrs->coupling_tmp1 = (dfloat *)calloc(Nblock, sizeof(dfloat));
+  nrs->coupling_tmp2 = (dfloat *)calloc(Nblock, sizeof(dfloat));
+  nrs->o_coupling_flux = platform->device.malloc(NfpTotal * sizeof(dfloat), nrs->coupling_flux);
+  nrs->o_coupling_area = platform->device.malloc(NfpTotal * sizeof(dfloat), nrs->coupling_area);
+  nrs->o_coupling_tmp1 = platform->device.malloc(Nblock * sizeof(dfloat), nrs->coupling_tmp1);
+  nrs->o_coupling_tmp2 = platform->device.malloc(Nblock * sizeof(dfloat), nrs->coupling_tmp2);
+
   coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name, direct_data_name_cum, staggered, M_VPM);
   
   //setting up the interpolator
@@ -464,6 +476,14 @@ void couplingFinalize() {
   nrs->o_coupling_bbox.free();
   delete nrs->interpolator;
   nrs->o_fields1D.free();
+  free(nrs->coupling_flux);
+  free(nrs->coupling_area);
+  free(nrs->coupling_tmp1);
+  free(nrs->coupling_tmp2);
+  nrs->o_coupling_flux.free();
+  nrs->o_coupling_area.free();
+  nrs->o_coupling_tmp1.free();
+  nrs->o_coupling_tmp2.free();
   
 
 }

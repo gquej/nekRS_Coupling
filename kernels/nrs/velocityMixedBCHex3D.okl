@@ -58,7 +58,9 @@
     @ restrict const dfloat *Ue,
     @ restrict const dlong *coupling_vmap,
     @ restrict const dlong *bounding_box,
-    const dlong tstep)
+    const dlong tstep,
+    const dfloat NW_area,
+    const dfloat NW_flux)
 {
 //The following arrays contain the necessry info to treat each face 
 int list_ind_beg[6] = {1, 1, 0, 0, 1, 0}; //beginning index to compute the derivative in the normal direction
@@ -98,7 +100,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     const int idy = remainder / p_Nq;                 //volumic y (j) index within this element 
     const int idx = remainder % p_Nq;                 //volumic x (i) index within this element 
     const dlong gid = e * p_Np * p_Nvgeo + idM_el ;
-
+    const dfloat sWJ = sgeo[sk * p_Nsgeo + p_WSJID]; //to integrate on face
     //components of the normal and both tangential vectors
     const dfloat nx  = sgeo[sid * p_Nsgeo + p_NXID];
     const dfloat ny  = sgeo[sid * p_Nsgeo + p_NYID];
@@ -243,6 +245,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     //retrieve the normal velocity at the boundary points from the vpm value
     dlong id_coupling = coupling_vmap[idM];
     double un_vpm = coupling_data1[3 * id_coupling + 0 ] * nx + coupling_data1[3 * id_coupling + 1 ] * ny + coupling_data1[3 * id_coupling + 2 ] * nz;
+    un_vpm -= NW_flux / NW_area; //correct the normal velocity by the weighted contribution of this node to the net flux
     //retrieve both tangential vorticity components at the first interior points, from the vpm value
     id_coupling = coupling_vmap[idM_dec];
     const dfloat wn_vpm  = coupling_data2[3 * id_coupling + 0 ] * nx + coupling_data2[3 * id_coupling + 1 ]  * ny + coupling_data2[3 * id_coupling + 2 ]  * nz; //omega_n
