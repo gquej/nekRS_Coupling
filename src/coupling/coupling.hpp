@@ -64,6 +64,7 @@ class Coupling {
         void Resetup();
 
         void Read(double dt);
+        void Read_local(double dt, std::vector<int> vertex_ID, std::vector<double> &Data1, std::vector<double> &Data2);
         void Write();
         void Advance(double dt) {precice_->advance(dt);};
         void Finalize() {precice_->finalize(); delete precice_;};

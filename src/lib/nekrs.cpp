@@ -988,6 +988,34 @@ void M2Pinterp(nrs_t *nrs)
   }
 }
 
+
+bool getbbox(double *bbox) {
+  mesh_t *mesh = nrs->meshV;
+  mesh->o_x.copyTo(mesh->x);
+  mesh->o_y.copyTo(mesh->y);
+  mesh->o_z.copyTo(mesh->z);
+  Coupling *coupling = nrs->coupling;
+  int size = coupling->mesh_size();
+  std::vector<dfloat> x_vertices, y_vertices, z_vertices;
+  for (size_t i = 0; i < size; i++) {
+    const int idM = nrs->inverse_coupling_vmap[i];
+    if (idM < 0)
+      continue;
+    x_vertices.push_back(mesh->x[idM]);
+    y_vertices.push_back(mesh->y[idM]);
+    z_vertices.push_back(mesh->z[idM]);
+  }
+  if (x_vertices.empty())
+    return false;
+  bbox[0] = *std::min_element(x_vertices.begin(), x_vertices.end());
+  bbox[1] = *std::max_element(x_vertices.begin(), x_vertices.end());
+  bbox[2] = *std::min_element(y_vertices.begin(), y_vertices.end());
+  bbox[3] = *std::max_element(y_vertices.begin(), y_vertices.end());
+  bbox[4] = *std::min_element(z_vertices.begin(), z_vertices.end());
+  bbox[5] = *std::max_element(z_vertices.begin(), z_vertices.end());
+  return true;
+}
+
 void couplingRead(double time, double dt, double coupling_max_dt, bool startOfCouplingWindow)
 {
   Coupling *coupling = nrs->coupling;
@@ -1010,10 +1038,44 @@ void couplingRead(double time, double dt, double coupling_max_dt, bool startOfCo
       couplingData2Prev = couplingData2Next;
     }
 
-    coupling->Read(coupling_max_dt);
-    const int nData = 3 * coupling->direct_mesh_size();
-    std::copy(coupling->Get_data1(), coupling->Get_data1() + nData, couplingData1Next.begin());
-    std::copy(coupling->Get_data2(), coupling->Get_data2() + nData, couplingData2Next.begin());
+    double bbox[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    //printf("Getting bounding box of the coupling region...\n");
+    if (getbbox(bbox)) {
+      //printf("Bounding box: [%f, %f] x [%f, %f] x [%f, %f]\n", bbox[0], bbox[1], bbox[2], bbox[3], bbox[4], bbox[5]);
+      const std::vector<dfloat> *vertices = coupling->direct_vertices();
+      const int np = coupling->direct_mesh_size();
+      double tol = 0.5; // Large enough for M2P stencil, depend on M_N in theory, and should englobe the movement for the whole coupling window 
+      std::vector<int> overlappedVerticesidx;
+      int countOverlappedVertices = 0;
+      for (int i = 0; i < np; i++) { // Recover only overlapped vertices 
+        if (((*vertices)[3*i+0] >= bbox[0]-tol && (*vertices)[3*i+0] <= bbox[1]+tol) &&
+            ((*vertices)[3*i+1] >= bbox[2]-tol && (*vertices)[3*i+1] <= bbox[3]+tol) &&
+            ((*vertices)[3*i+2] >= bbox[4]-tol && (*vertices)[3*i+2] <= bbox[5]+tol)) {
+          overlappedVerticesidx.push_back(i);
+          countOverlappedVertices++;
+        }
+      }
+      std::vector<double> Data1temp(3 * countOverlappedVertices, 0.0);
+      std::vector<double> Data2temp(3 * countOverlappedVertices, 0.0);
+      //printf("Reading local coupling data for %d overlapped vertices...\n", countOverlappedVertices);
+      if (countOverlappedVertices > 0)
+        coupling->Read_local(coupling_max_dt, overlappedVerticesidx, Data1temp, Data2temp);
+      //printf("Local coupling data read for overlapped vertices, storing...\n");
+      for (int i = 0; i < countOverlappedVertices; i++) {
+        couplingData1Next[3 * overlappedVerticesidx[i] + 0] = Data1temp[3 * i + 0];
+        couplingData1Next[3 * overlappedVerticesidx[i] + 1] = Data1temp[3 * i + 1];
+        couplingData1Next[3 * overlappedVerticesidx[i] + 2] = Data1temp[3 * i + 2];
+        couplingData2Next[3 * overlappedVerticesidx[i] + 0] = Data2temp[3 * i + 0];
+        couplingData2Next[3 * overlappedVerticesidx[i] + 1] = Data2temp[3 * i + 1];
+        couplingData2Next[3 * overlappedVerticesidx[i] + 2] = Data2temp[3 * i + 2];
+      }
+      //printf("Local coupling data read and stored for overlapped vertices.\n");
+    }
+
+    //coupling->Read(coupling_max_dt);
+    //const int nData = 3 * coupling->direct_mesh_size();
+    //std::copy(coupling->Get_data1(), coupling->Get_data1() + nData, couplingData1Next.begin());
+    //std::copy(coupling->Get_data2(), coupling->Get_data2() + nData, couplingData2Next.begin());
 
     couplingWindowT0 = time;
     couplingWindowT1 = time + coupling_max_dt;

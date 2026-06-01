@@ -75,6 +75,13 @@ void Coupling::Read(double dt) {
     precice_->readData(direct_mesh_name_, data2_name_, direct_vertex_IDs_, dt, Data2_);
 }
 
+
+void Coupling::Read_local(double dt, std::vector<int> vertex_ID, std::vector<double> &Data1, std::vector<double> &Data2) {
+    precice_->readData(direct_mesh_name_, data1_name_, vertex_ID, dt, Data1); // Changed to direct mesh and vertex IDs for M2P here
+    precice_->readData(direct_mesh_name_, data2_name_, vertex_ID, dt, Data2);
+}
+
+
 void Coupling::Write() {    
     precice_->writeData(direct_mesh_name_, direct_data_name_, direct_vertex_IDs_, direct_data_);
     precice_->writeData(direct_mesh_name_, direct_data_name_cum_, direct_vertex_IDs_, direct_data_cum_);
