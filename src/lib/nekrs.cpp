@@ -843,9 +843,9 @@ void couplingWrite() {
       (*direct_data)[3 * i + 0] = U_eval[i + 0 * np];
       (*direct_data)[3 * i + 1] = U_eval[i + 1 * np];
       (*direct_data)[3 * i + 2] = U_eval[i + 2 * np];
-      (*direct_data_cum)[3 * i + 0] = std::round(cum_eval[i + 0 * np]);
-      (*direct_data_cum)[3 * i + 1] = std::round(cum_eval[1 * np + i ]);
-      (*direct_data_cum)[3 * i + 2] = std::round(cum_eval[2 * np + i ]);
+      (*direct_data_cum)[3 * i + 0] = std::round(cum_eval[i]);
+      (*direct_data_cum)[3 * i + 1] = std::round(cum_eval[i]);
+      (*direct_data_cum)[3 * i + 2] = std::round(cum_eval[i]);
     }
   }
   if (platform->comm.mpiRank == 0) {
