@@ -48,7 +48,7 @@ void Coupling::Setup(precice::string_view mesh_name, precice::string_view direct
     direct_mesh_size_ = precice_->getMeshVertexSize(direct_mesh_name_);
     direct_vertices_.resize(3 * direct_mesh_size_);
     direct_data_.resize(3 * direct_mesh_size_);
-    direct_data_cum_.resize(direct_mesh_size_);
+    direct_data_cum_.resize(3 *direct_mesh_size_);
     direct_vertex_IDs_.resize(direct_mesh_size_);
     precice_->getMeshVertexIDsAndCoordinates(direct_mesh_name_, direct_vertex_IDs_, direct_vertices_);
     

@@ -464,6 +464,13 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
 
   nrs->interpolator->setPoints(n_VPM_mesh * np, xp.data(), yp.data(), zp.data());
   nrs->interpolator->find();
+  nrs->coupling_cum = (dfloat *)calloc(nrs->fieldOffset, sizeof(dfloat));
+  nrs->o_coupling_cum = platform->device.malloc(nrs->fieldOffset * sizeof(dfloat), nrs->coupling_cum);
+  for (int i = 0; i < n_VPM_mesh * nrs->fieldOffset; i++) {
+    nrs->coupling_cum[i] = 1.0;
+  }
+  nrs->o_coupling_cum.copyFrom(nrs->coupling_cum);
+  nrs->o_fields1D_cum = platform->device.malloc(n_VPM_mesh * offset * sizeof(dfloat));  
 }
 
 void couplingFinalize() {
@@ -484,6 +491,9 @@ void couplingFinalize() {
   nrs->o_coupling_area.free();
   nrs->o_coupling_tmp1.free();
   nrs->o_coupling_tmp2.free();
+  nrs->o_coupling_cum.free();
+  free(nrs->coupling_cum);
+  nrs->o_fields1D_cum.free();
   
 
 }
@@ -806,8 +816,16 @@ void couplingWrite() {
     n_VPM_mesh * np, 
     nrs->o_fields1D);
 
+  nrs->interpolator->eval(1,   // evaluation of the field o_U at the previously defined points, stored in o_fields1D
+    nrs->fieldOffset, 
+    nrs->o_coupling_cum, 
+    n_VPM_mesh * np, 
+    nrs->o_fields1D_cum );
+
   std::vector<dfloat> U_eval(n_VPM_mesh * np * Nfields);
   nrs->o_fields1D.copyTo(U_eval.data());
+  std::vector<dfloat> cum_eval(n_VPM_mesh * np);
+  nrs->o_fields1D_cum.copyTo(cum_eval.data());
   std::vector<double> * direct_data = nrs->coupling->direct_data();
   std::vector<double> * direct_data_cum = nrs->coupling->direct_data_cum();
   if (nrs->coupling->staggered()) {
@@ -815,7 +833,9 @@ void couplingWrite() {
       (*direct_data)[3 * i + 0] = U_eval[i + 0 * np];
       (*direct_data)[3 * i + 1] = U_eval[3 * np + i + 1 * np];
       (*direct_data)[3 * i + 2] = U_eval[6 * np + i + 2 * np];
-      (*direct_data_cum)[i] = 1.;
+      (*direct_data_cum)[3 * i + 0] = std::round(cum_eval[i + 0 * np]);
+      (*direct_data_cum)[3 * i + 1] = std::round(cum_eval[1 * np + i ]);
+      (*direct_data_cum)[3 * i + 2] = std::round(cum_eval[2 * np + i ]);
       
     }
   } else {
@@ -823,7 +843,9 @@ void couplingWrite() {
       (*direct_data)[3 * i + 0] = U_eval[i + 0 * np];
       (*direct_data)[3 * i + 1] = U_eval[i + 1 * np];
       (*direct_data)[3 * i + 2] = U_eval[i + 2 * np];
-      (*direct_data_cum)[i] = 1.;
+      (*direct_data_cum)[3 * i + 0] = std::round(cum_eval[i + 0 * np]);
+      (*direct_data_cum)[3 * i + 1] = std::round(cum_eval[1 * np + i ]);
+      (*direct_data_cum)[3 * i + 2] = std::round(cum_eval[2 * np + i ]);
     }
   }
   if (platform->comm.mpiRank == 0) {

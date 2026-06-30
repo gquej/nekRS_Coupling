@@ -36,6 +36,9 @@ struct nrs_t {
   occa::memory o_coupling_area;
   occa::memory o_coupling_tmp1;
   occa::memory o_coupling_tmp2;
+  dfloat *coupling_cum;
+  occa::memory o_coupling_cum;
+  occa::memory o_fields1D_cum;
 
 
   static constexpr double targetTimeBenchmark {0.2};
