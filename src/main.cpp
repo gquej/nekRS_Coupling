@@ -524,6 +524,7 @@ int main(int argc, char** argv)
 
   std::string_view solver_name = "Nek";
   std::string_view mesh_name = "Nek-Mesh";
+  std::string_view interior_mesh_name = "Nek-Interior-Mesh";
   std::string_view direct_mesh_name = "Murphy-Mesh";
   std::string_view data_name = "Murphy_u";
   std::string_view data2_name = "Murphy_w";
@@ -543,7 +544,7 @@ int main(int argc, char** argv)
   if (staggered) tol_bb = base_tol_bb + 1. /((double) M_VPM);
   else tol_bb = base_tol_bb;
 
-  nekrs::couplingSetup(config_file, solver_name, mesh_name,
+  nekrs::couplingSetup(config_file, solver_name, mesh_name, interior_mesh_name,
                       direct_mesh_name, data_name, data2_name,
                       direct_data_name, direct_data_name_cum, tol_bb,
                       periodic_dir, periodic_bounds, M_VPM, staggered);

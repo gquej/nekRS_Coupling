@@ -223,7 +223,7 @@ void setup(MPI_Comm commg_in,
   initialized = true;
 }
 void couplingSetup(std::string_view config_file,std::string_view solver_name,
-  std::string_view mesh_name, std::string_view direct_mesh_name,
+  std::string_view mesh_name, std::string_view interior_mesh_name, std::string_view direct_mesh_name,
   std::string_view data_name, std::string_view data2_name,
   std::string_view direct_data_name, std::string_view direct_data_name_cum,
   double tol_bb, bool *periodic_dir, double * periodic_bounds,
@@ -269,6 +269,7 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
   Coupling * coupling = nrs->coupling;
 
   int boundary_points_counter = 0;
+  int interior_boundary_points_counter = 0;
 
   nrs->coupling_vmap = (dlong *) calloc(mesh->Nelements * mesh->Np, sizeof(dlong)); //mapping from volumic indices to precice buffer (i.e., a lot of these are empty since a lot of nodes are not at a boundary)
   for (int i = 0; i < mesh->Nelements * mesh->Np; i++)
@@ -282,6 +283,8 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
       const dlong bcType = nrs->EToB[f + p_Nfaces * e];
       if (bcType == 3) {
         boundary_points_counter += p_Nfp * 2; //factor 2 is to count also the interior layer of points when imposing omega on the second spectral point
+      } else if (bcType == 1) {
+        interior_boundary_points_counter += p_Nfp;
       }
     }
   }
@@ -289,10 +292,13 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
   coupling->Resize_mapping(boundary_points_counter); //total number of nek outer vertices (as seen by nek)
   std::vector<int> * mapping = coupling->mapping(); //mapping from the nek mesh to the precice buffe
   int counter_to_idM[boundary_points_counter];
-  
+
+  double interior_vertices_temp [3* interior_boundary_points_counter]; //temp array to store all the inner vertices
+  int interior_counter_to_idM[interior_boundary_points_counter];
   //filling vertices_temp with all the outer vertices (including the doubles!!)
 
   int total_count = 0;
+  int interior_total_count = 0;
 
   for (dlong e = 0; e < N_elements; e++) {
     for (int f = 0; f < p_Nfaces; f++) {
@@ -359,11 +365,37 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
           counter_to_idM[total_count] = idM_local;
           total_count ++;
         }
+      } else if (bcType == 1) {
+        for (int m = 0; m < p_Nfp; ++m) {
+          const int n = m + f * p_Nfp;
+          const int sk = e * p_Nfp * p_Nfaces + n;
+          const dlong idM = ((mesh->vmapM))[sk];
+
+          if (periodic_dir[0] && abs(nek_x[idM] - periodic_bounds[1]) < 1e-8) {           //periodicity in x hardcoded here
+            interior_vertices_temp[3 * interior_total_count + 0] = periodic_bounds[0];
+          } else {
+            interior_vertices_temp[3 * interior_total_count + 0] = nek_x[idM];
+          }
+
+          if (periodic_dir[1] && abs(nek_y[idM] - periodic_bounds[3]) < 1e-8) {           //periodicity in y hardcoded here
+            interior_vertices_temp[3 * interior_total_count + 1] = periodic_bounds[2];
+          } else {
+            interior_vertices_temp[3 * interior_total_count + 1] = nek_y[idM];
+          }
+
+          if (periodic_dir[2] && abs(nek_z[idM] - periodic_bounds[5]) < 1e-8) {           //periodicity in z hardcoded here
+            interior_vertices_temp[3 * interior_total_count + 2] = periodic_bounds[4];
+          } else {
+            interior_vertices_temp[3 * interior_total_count + 2] = nek_z[idM];
+          }
+          interior_counter_to_idM[interior_total_count] = idM;
+          interior_total_count ++;
+        }
       }
     }
   }
 
-  //filtering all the nek vertices that are duplicated across this rank (and only this rank)
+  //filtering all the outer nek vertices that are duplicated across this rank (and only this rank)
   int unique_count = 0;
   double diff1, diff2, diff3;
   double tol = 1.e-10;
@@ -393,6 +425,7 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
   }
 
   coupling->Set_vertices(vertices_temp, unique_count);
+  coupling->Set_interior_vertices(interior_vertices_temp, interior_total_count);
 
   nrs->o_coupling_data1 = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data1());
   nrs->o_coupling_data2 = platform->device.malloc(sizeof(double) * unique_count * 3, coupling ->Get_data2());
@@ -419,7 +452,7 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
   nrs->o_coupling_tmp1 = platform->device.malloc(Nblock * sizeof(dfloat), nrs->coupling_tmp1);
   nrs->o_coupling_tmp2 = platform->device.malloc(Nblock * sizeof(dfloat), nrs->coupling_tmp2);
 
-  coupling->Setup(mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name, direct_data_name_cum, staggered, M_VPM);
+  coupling->Setup(mesh_name, interior_mesh_name, direct_mesh_name, data_name, nrs->coupling_bbox, data2_name, direct_data_name, direct_data_name_cum, staggered, M_VPM);
   
   //setting up the interpolator
 

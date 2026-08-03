@@ -20,7 +20,7 @@ class Coupling {
         string_t solver_name_; //!< The name of this solver
         string_t config_file_; //!< The path to the preCICE configuration file
 
-        //this mesh and receive -----------------------------
+        //this mesh and receive ----------------------------- outer boundary of the NW mesh
         string_t mesh_name_; //name of this mesh
         int mesh_size_; //size of this mesh
         vector_t vertices_; //The vertices, stored as [x1,y1,z1,x2,y2,z2,..., xn,yn,zn]
@@ -32,6 +32,12 @@ class Coupling {
 
         string_t data2_name_; //data 2: murphy vorticity
         vector_t Data2_;
+
+        //inner boundary of NW mesh (used to paint the interior of the aero body)
+        string_t interior_mesh_name_; //name of this mesh
+        int interior_mesh_size_; //size of this mesh
+        vector_t interior_vertices_; //The vertices, stored as [x1,y1,z1,x2,y2,z2,..., xn,yn,zn]
+        vector<int> interior_vertex_IDs_; //The vertices IDs
 
         //directly accessed mesh and send -----------------------------
         string_t direct_mesh_name_;
@@ -55,10 +61,11 @@ class Coupling {
     public: 
         Coupling() = default;
         explicit Coupling (std::string_view solver_name, std::string_view config_file);
-        void Setup(precice::string_view mesh_name, precice::string_view direct_mesh_name, precice::string_view data_name, double *bounding_box, precice::string_view data2_name, precice::string_view direct_data_name, precice::string_view direct_data_name_cum,
+        void Setup(precice::string_view mesh_name, precice::string_view interior_mesh_name, precice::string_view direct_mesh_name, precice::string_view data_name, double *bounding_box, precice::string_view data2_name, precice::string_view direct_data_name, precice::string_view direct_data_name_cum,
                    bool staggered, int M_VPM);
         void Resize_mapping(int mapping_size) {mapping_.resize(mapping_size);};
         void Set_vertices(double *vertices, int size);
+        void Set_interior_vertices(double *vertices, int size);
 
         void Read(double dt);
         void Write();
