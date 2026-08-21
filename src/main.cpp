@@ -534,11 +534,22 @@ int main(int argc, char** argv)
   double final_step_tol = 1.e-10; //tolerance to decided whether this nek dt is the last one for the current coupling window
   double base_tol_bb = 1.e-4;
   std::string config_file;
-  bool periodic_dir[3];
-  double periodic_bounds[6];
-  int M_VPM;
-  bool staggered;
-  
+  // These are all filled by readCouplingParameters() via inipp's extract(), which
+  // leaves its destination UNTOUCHED (and returns false, a return value that is
+  // ignored) whenever the key is absent from [CASEDATA]. Any key not present in the
+  // .par file therefore leaves the variable uninitialized, and reading it is UB
+  // whose result depends on the compiler/stack layout. This bit real: `staggered`
+  // is commented out (`#staggered=1`) in the airfoil/uniform case, so it read as
+  // false under Docker's clang-15 build but true under the native macOS gcc-16
+  // build -- silently enabling the staggered half-cell-offset interpolation path in
+  // couplingSetup()/couplingWrite() and making the 3 components of Nek_cum/Nek_u
+  // land on points offset by 0.5*h_VPM from each other. Always give these explicit
+  // defaults so an absent key means "off", not "whatever was on the stack".
+  bool periodic_dir[3] = {false, false, false};
+  double periodic_bounds[6] = {0., 0., 0., 0., 0., 0.};
+  int M_VPM = 1;
+  bool staggered = false;
+
   nekrs::readCouplingParameters(&config_file, periodic_dir, periodic_bounds, &M_VPM, &staggered);
   double tol_bb;
   if (staggered) tol_bb = base_tol_bb + 1. /((double) M_VPM);
