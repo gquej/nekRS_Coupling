@@ -1,5 +1,7 @@
 #include <stdlib.h>
 #include <filesystem>
+#include <fstream>
+#include <system_error>
 #include <functional>
 #include "nrs.hpp"
 #include "setup.hpp"
@@ -35,6 +37,9 @@ static int firstOutfld = 1;
 static int enforceLastStep = 0;
 static int enforceOutputStep = 0;
 static bool initialized = false;
+static int nekDumpCount = 0; // classic dumps written by this process
+static int nekChkCount = 0;  // restart checkpoints written by this process
+static std::string couplingDir; // Coupling_dir, taken from the preciceConfig path
 
 namespace nekrs {
 
@@ -44,6 +49,8 @@ void reset()
   firstOutfld = 1;
   enforceLastStep = 0;
   enforceOutputStep = 0;
+  nekDumpCount = 0;
+  nekChkCount = 0;
 }
 
 double startTime(void)
@@ -620,7 +627,194 @@ int outputStep(double time, int tStep)
 
 void outputStep(int val) { nrs->isOutputStep = val; }
 
-void outfld(double time, int step, std::string suffix)
+// nek5000 names its dumps <prefix><case><fid>.f<NNNNN>. NNNNN is NOT the time step: it is
+// a counter (nfld) held in a SAVEd local array of mfo_open_files (nek5000/core/prepost.f)
+// that is bumped once per dump and zero-initialised in every new process. Nothing on disk
+// is ever consulted, so a restarted run numbers from 1 again and overwrites the files of
+// the run it is continuing.
+//
+// That counter is a non-external symbol inside the nek5000 library, so it cannot be set
+// from here and nothing passed down influences the name. Instead, when a shift is active
+// we never let nek write under the real name at all: the dump goes out under a temporary
+// prefix and is then moved into the continued sequence, so the previous run's files are
+// never opened for writing. Shifting happens only when [CASEDATA] restart = 1; each of the
+// two sequences gets its own shift (see resolveCheckpointOffset below).
+//
+// Both sequences are shifted: the classic one (empty suffix -> <case>0.f*) and the restart
+// checkpoints ("restart" suffix -> restart<case>0.f*). nek keys its counters by prefix and
+// i_find_prefix() matches them by substring, so the two temporaries must never be a
+// substring of one another -- keeping them the same length guarantees that.
+static constexpr const char *chkSuffix = "restart";
+static constexpr const char *tmpPrefixFld = "tmpfld"; // classic sequence   (empty suffix)
+static constexpr const char *tmpPrefixChk = "tmpchk"; // checkpoint sequence (chkSuffix)
+
+static std::string fldName(const std::string &base, int fid, int n)
+{
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%d.f%05d", fid, n);
+  return base + buf;
+}
+
+// Move the dump nek just wrote under tmpPrefix into slot (count + writeStepOffset) of the
+// real sequence, and rewrite that sequence's .nek5000 index over the shifted names.
+static void shiftLastDump(const std::string &realPrefix,
+                          const std::string &tmpPrefix,
+                          int count,
+                          int writeStepOffset)
+{
+  std::string casename;
+  platform->options.getArgs("CASENAME", casename);
+
+  const std::string realBase = realPrefix + casename;
+  const std::string tmpBase = tmpPrefix + casename;
+  const int shifted = count + writeStepOffset;
+
+  // one file per nek output group (nfileo); with a single output file this runs once
+  int nMoved = 0;
+  for (int fid = 0;; ++fid) {
+    const auto src = fldName(tmpBase, fid, count);
+    if (!fs::exists(src))
+      break;
+
+    const auto dst = fldName(realBase, fid, shifted);
+    std::error_code ec;
+    fs::rename(src, dst, ec);
+    if (ec) {
+      std::cout << "WARNING: could not move " << src << " -> " << dst << " (" << ec.message()
+                << "); dump left under its temporary name\n";
+      return;
+    }
+    ++nMoved;
+  }
+
+  if (nMoved == 0) {
+    std::cout << "WARNING: expected dump " << fldName(tmpBase, 0, count)
+              << " not found; numbering NOT shifted\n";
+    return;
+  }
+
+  // nek wrote the index as <tmpBase>.nek5000, pointing at the tmp names and carrying its
+  // own un-shifted count. Rewrite it as <realBase>.nek5000 over the continued sequence.
+  std::ifstream in(tmpBase + ".nek5000");
+  if (!in)
+    return;
+
+  std::vector<std::string> lines;
+  for (std::string line; std::getline(in, line);) {
+    const auto at = line.find(tmpBase);
+    if (at != std::string::npos)
+      line.replace(at, tmpBase.size(), realBase); // filetemplate: drop the tmp prefix
+    if (line.find("numtimesteps") != std::string::npos)
+      line = " numtimesteps: " + std::to_string(shifted);
+    lines.push_back(line);
+  }
+  in.close();
+
+  std::ofstream out(realBase + ".nek5000", std::ios::trunc);
+  for (const auto &line : lines)
+    out << line << "\n";
+  out.close();
+
+  std::error_code ec;
+  fs::remove(tmpBase + ".nek5000", ec);
+}
+
+// The two sequences advance at unrelated rates -- the classic one on writeInterval, the
+// checkpoints once per coupling window -- so a single offset cannot serve both. The classic
+// shift is [CASEDATA] writeStepOffset. The checkpoint shift is not a parameter at all: it is
+// the number in [GENERAL] startFrom, which by construction is the last valid checkpoint of
+// the run being continued. Resolved once and cached, so the warning is printed at most once.
+static int resolveCheckpointOffset()
+{
+  static int cached = -1;
+  if (cached >= 0)
+    return cached;
+
+  std::string startFrom;
+  platform->options.getArgs("RESTART FILE NAME", startFrom);
+
+  // startFrom looks like "restart<case>0.f00021" -- take the trailing .f<NNNNN>
+  const auto at = startFrom.rfind(".f");
+  int n = 0;
+  if (at != std::string::npos && sscanf(startFrom.c_str() + at + 2, "%d", &n) == 1 && n > 0) {
+    cached = n;
+  }
+  else {
+    cached = 0;
+    if (platform->comm.mpiRank == 0)
+      std::cout << "WARNING: restart = 1 but no checkpoint number could be read from [GENERAL] "
+                   "startFrom (\""
+                << startFrom
+                << "\"); restart checkpoints will renumber from 1 and overwrite the previous run\n";
+  }
+  return cached;
+}
+
+// Table mapping every restart checkpoint on disk to the classic dump number and time it
+// corresponds to, so a later run can read off the writeStepOffset / startTime to continue
+// from any checkpoint -- not just the last one. Rewritten in full at every checkpoint;
+// rows at or beyond the checkpoint being written describe a future this run has just
+// superseded and are dropped, so the table always matches what is actually on disk.
+static void writeRestartIndex(int checkpoint, int lastDump, double t, int tStep)
+{
+  std::string casename;
+  platform->options.getArgs("CASENAME", casename);
+
+  // Coupling_dir/restart, so nek's and MURPHY's restart indices sit side by side next to
+  // HOW_TO_RESTART.txt; fall back to the run directory if preciceConfig was never read.
+  const fs::path dir = (couplingDir.empty() ? fs::path(".") : fs::path(couplingDir)) / "restart";
+  std::error_code dirEc;
+  fs::create_directories(dir, dirEc);
+  const auto path = (dir / "nek.restartinfo").string();
+
+  struct Row {
+    int chk;
+    int dump;
+    double time;
+    int step;
+  };
+  std::vector<Row> rows;
+
+  std::ifstream in(path);
+  if (in) {
+    for (std::string line; std::getline(in, line);) {
+      Row r;
+      if (!line.empty() && line[0] != '#' &&
+          sscanf(line.c_str(), "%d %d %lg %d", &r.chk, &r.dump, &r.time, &r.step) == 4 &&
+          r.chk < checkpoint)
+        rows.push_back(r);
+    }
+    in.close();
+  }
+  rows.push_back({checkpoint, lastDump, t, tStep});
+
+  std::ofstream out(path, std::ios::trunc);
+  if (!out) {
+    std::cout << "WARNING: could not write " << path << "\n";
+    return;
+  }
+
+  char buf[256];
+  out << "# nekRS restart index -- case '" << casename << "'\n"
+      << "# Rewritten at every restart checkpoint. One row per " << chkSuffix << casename
+      << "0.f<checkpoint> on disk.\n"
+      << "#\n"
+      << "# To continue from a given checkpoint, put in the .par:\n"
+      << "#   [GENERAL]  startFrom = " << chkSuffix << casename << "0.f<checkpoint>\n"
+      << "#   [CASEDATA] restart = 1 ; startTime = <time> ; writeStepOffset = <lastDump>\n"
+      << "#\n";
+  snprintf(buf, sizeof(buf), "# %10s %11s %24s %10s", "checkpoint", "lastDump", "time", "tStep");
+  out << buf << "\n";
+
+  for (const auto &r : rows) {
+    char chkStr[16];
+    snprintf(chkStr, sizeof(chkStr), "%05d", r.chk);
+    snprintf(buf, sizeof(buf), "  %10s %11d %24.15e %10d", chkStr, r.dump, r.time, r.step);
+    out << buf << "\n";
+  }
+}
+
+void outfld(double time, int step, std::string suffix, int writeStepOffset, bool restart)
 {
   std::string oldValue;
   platform->options.getArgs("CHECKPOINT OUTPUT MESH", oldValue);
@@ -631,14 +825,44 @@ void outfld(double time, int step, std::string suffix)
   if (platform->options.compareArgs("MOVING MESH", "TRUE"))
     platform->options.setArgs("CHECKPOINT OUTPUT MESH", "TRUE");
 
-  writeFld(nrs, time, step, suffix);
+  const bool isChk = (suffix == chkSuffix);
+  const std::string tmpPrefix = isChk ? tmpPrefixChk : tmpPrefixFld;
+
+  if (restart && writeStepOffset <= 0 && firstOutfld && platform->comm.mpiRank == 0)
+    std::cout << "WARNING: restart = 1 but writeStepOffset = " << writeStepOffset
+              << "; classic dumps will renumber from 1 and overwrite the previous run\n";
+
+  // each sequence carries its own shift; 0 means "write where nek would have written"
+  const int fldOff = restart ? writeStepOffset : 0;
+  const int chkOff = restart ? resolveCheckpointOffset() : 0;
+  const int off = isChk ? chkOff : fldOff;
+  const bool shift = (off > 0);
+
+  writeFld(nrs, time, step, shift ? tmpPrefix : suffix);
+
+  // mirror nek's per-prefix counter, whether or not we are shifting: the restart index
+  // needs the classic dump number in a first run too.
+  int &count = isChk ? nekChkCount : nekDumpCount;
+  ++count;
+
+  if (shift || isChk) {
+    // nek's I/O ranks (pid0 of each output group) must have closed their files first
+    MPI_Barrier(platform->comm.mpiComm);
+    if (platform->comm.mpiRank == 0) {
+      if (shift)
+        shiftLastDump(suffix, tmpPrefix, count, off);
+      if (isChk)
+        writeRestartIndex(nekChkCount + chkOff, nekDumpCount + fldOff, time, step);
+    }
+  }
+
   lastOutputTime = time;
   firstOutfld = 0;
 
   platform->options.setArgs("CHECKPOINT OUTPUT MESH", oldValue);
 }
 
-void outfld(double time, int step) { outfld(time, step, ""); }
+void outfld(double time, int step, int writeStepOffset, bool restart) { outfld(time, step, "", writeStepOffset, restart); }
 
 double endTime(void)
 {
@@ -915,8 +1139,10 @@ double coupling_dt(double coupling_max_dt, double dt_solver, double tol_floor_dt
 
 bool isCouplingOngoing() {return nrs->coupling->IsCouplingOngoing(); }
 
-void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds, int *M_VPM, bool *staggered) {
+void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds, int *M_VPM, bool *staggered, double *time, int *writeStepOffset, bool *restart) {
   platform->par->extract("casedata", "preciceConfig", *config_file);
+  // the restart index lives next to precice-config.xml (Coupling_dir), alongside MURPHY's
+  couplingDir = fs::path(*config_file).parent_path().string();
   platform->par->extract("casedata", "periodicX", periodic_dir[0]);
   platform->par->extract("casedata", "periodicY", periodic_dir[1]);
   platform->par->extract("casedata", "periodicZ", periodic_dir[2]);
@@ -928,6 +1154,11 @@ void readCouplingParameters(std::string *config_file, bool *periodic_dir, double
   platform->par->extract("casedata", "periodicZmax", periodic_bounds[5]);
   platform->par->extract("casedata", "M_VPM", M_VPM[0]);
   platform->par->extract("casedata", "staggered", staggered[0]);
+  platform->par->extract("casedata", "restart", restart[0]);
+  if (restart[0]) {//if restart s false, dont read the startTime and writeStepOffset, as they are not needed. If restart is true, read them from the par file
+    platform->par->extract("casedata", "startTime", time[0]); //for the restart, the user has to set the startTime in the par file to the restart time
+    platform->par->extract("casedata", "writeStepOffset", writeStepOffset[0]); //offset for the output step counter
+  }
 } 
 }//namespace nekrs
 

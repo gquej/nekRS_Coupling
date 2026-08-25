@@ -15,8 +15,8 @@ void setup(MPI_Comm commg_in, MPI_Comm comm_in,
            int debug);
 void copyFromNek(double time, int tstep);
 void udfExecuteStep(double time, int tstep, int isOutputStep);
-void outfld(double time, int step);
-void outfld(double time, int step, std::string suffix);
+void outfld(double time, int step, int writeStepOffset, bool restart);
+void outfld(double time, int step, std::string suffix, int writeStepOffset, bool restart);
 int outputStep(double time, int tStep);
 void outputStep(int val);
 int finalize();
@@ -60,7 +60,7 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
                    int M_VPM, bool staggered);
 void couplingFinalize();
 bool isCouplingOngoing();
-void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds, int *M_VPM, bool *staggered);
+void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds, int *M_VPM, bool *staggered, double *time, int *writeStepOffset, bool *restart);
 }
 
 #endif

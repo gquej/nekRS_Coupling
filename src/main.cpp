@@ -530,6 +530,8 @@ int main(int argc, char** argv)
   std::string_view data2_name = "Murphy_w";
   std::string_view direct_data_name = "Nek_u";
   std::string_view direct_data_name_cum = "Nek_cum";
+  int writeStepOffset = 0;
+  bool restart = false;
   double tol_floor_dt = 0.1; //tolerance for the coupling nek dt versus dt required by nek (coupling_dt < 1.1 * nek_dt)
   double final_step_tol = 1.e-10; //tolerance to decided whether this nek dt is the last one for the current coupling window
   double base_tol_bb = 1.e-4;
@@ -550,7 +552,7 @@ int main(int argc, char** argv)
   int M_VPM = 1;
   bool staggered = false;
 
-  nekrs::readCouplingParameters(&config_file, periodic_dir, periodic_bounds, &M_VPM, &staggered);
+  nekrs::readCouplingParameters(&config_file, periodic_dir, periodic_bounds, &M_VPM, &staggered, &time, &writeStepOffset, &restart);
   double tol_bb;
   if (staggered) tol_bb = base_tol_bb + 1. /((double) M_VPM);
   else tol_bb = base_tol_bb;
@@ -580,7 +582,7 @@ int main(int argc, char** argv)
     if (isLastStep) outputStep = 1;
     if (nekrs::writeInterval() < 0) outputStep = 0;
     nekrs::outputStep(outputStep);
-    if (outputStep) nekrs::outfld(time, tStep);
+    if (outputStep) nekrs::outfld(time, tStep, writeStepOffset, restart);
 
     if (tStep <= 1000) nekrs::verboseInfo(true); 
 
@@ -646,6 +648,11 @@ int main(int argc, char** argv)
     //Coupling write
     if (abs(dt - coupling_max_dt) < final_step_tol) {
       nekrs::couplingWrite();
+      // This substep closes the current preCICE time window: dump the restart checkpoint
+      // here (and only here) so that checkpoints exist at coupling-window boundaries only,
+      // in step with MURPHY's own checkpoint. Set writeInterval < 0 in the .par to disable
+      // the per-substep dump above, otherwise both fire.
+      nekrs::outfld(time, tStep, "restart", writeStepOffset, restart);
     }
     nekrs::couplingAdvance(dt);
     //----------------------------------------------------------------------------
