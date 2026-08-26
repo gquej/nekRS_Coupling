@@ -551,8 +551,10 @@ int main(int argc, char** argv)
   double periodic_bounds[6] = {0., 0., 0., 0., 0., 0.};
   int M_VPM = 1;
   bool staggered = false;
+  bool pre_simulation = false;
+  int pre_sim_expected_last_step = -1;
 
-  nekrs::readCouplingParameters(&config_file, periodic_dir, periodic_bounds, &M_VPM, &staggered, &time, &writeStepOffset, &restart);
+  nekrs::readCouplingParameters(&config_file, periodic_dir, periodic_bounds, &M_VPM, &staggered, &time, &writeStepOffset, &restart, &pre_simulation, &pre_sim_expected_last_step);
   double tol_bb;
   if (staggered) tol_bb = base_tol_bb + 1. /((double) M_VPM);
   else tol_bb = base_tol_bb;
@@ -560,7 +562,7 @@ int main(int argc, char** argv)
   nekrs::couplingSetup(config_file, solver_name, mesh_name, interior_mesh_name,
                       direct_mesh_name, data_name, data2_name,
                       direct_data_name, direct_data_name_cum, tol_bb,
-                      periodic_dir, periodic_bounds, M_VPM, staggered);
+                      periodic_dir, periodic_bounds, M_VPM, staggered, pre_simulation, pre_sim_expected_last_step);
   //------------------------------- Coupling setup -----------------------------------------------
   //----------------------------------------------------------------------------------------------
   

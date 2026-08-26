@@ -60,7 +60,9 @@
     @ restrict const dlong *bounding_box,
     const dlong tstep,
     const dfloat NW_area,
-    const dfloat NW_flux)
+    const dfloat NW_flux, 
+    const bool pre_simulation,
+    const int pre_sim_expected_last_step)
 {
 //The following arrays contain the necessry info to treat each face 
 int list_ind_beg[6] = {1, 1, 0, 0, 1, 0}; //beginning index to compute the derivative in the normal direction
@@ -368,16 +370,21 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
 
     //--------------------------------------------------------------------------------------------------------//
     //------------------------------------- Finally imposing the value --------------------------------------//
-
-    const bool impose_LS_value = true;
-    if (impose_LS_value) {                 // impose 3 comp of omega in the sense of the least sqaures
-        UH[idM + 0 * offset] = U_LS;
-        UH[idM + 1 * offset] = V_LS;
-        UH[idM + 2 * offset] = W_LS;
-    } else {                               // impose 2 tangential components of omega
-        UH[idM + 0 * offset] = usol;
-        UH[idM + 1 * offset] = vsol;
-        UH[idM + 2 * offset] = wsol;
+    if (pre_simulation && (tstep != pre_sim_expected_last_step)) { // presimulation where we sue classic dirichlet conditions from VPM //&& tstep < 20
+        UH[idM + 0 * offset] = coupling_data1[3 * id_coupling + 0 ];
+        UH[idM + 1 * offset] = coupling_data1[3 * id_coupling + 1 ];
+        UH[idM + 2 * offset] = coupling_data1[3 * id_coupling + 2 ];
+    } else {
+        const bool impose_LS_value = true;
+        if (impose_LS_value) {                 // impose 3 comp of omega in the sense of the least sqaures
+            UH[idM + 0 * offset] = U_LS;
+            UH[idM + 1 * offset] = V_LS;
+            UH[idM + 2 * offset] = W_LS;
+        } else {                               // impose 2 tangential components of omega
+            UH[idM + 0 * offset] = usol;
+            UH[idM + 1 * offset] = vsol;
+            UH[idM + 2 * offset] = wsol;
+        }
     }
     
     

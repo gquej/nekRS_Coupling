@@ -39,6 +39,8 @@ static int enforceOutputStep = 0;
 static bool initialized = false;
 static int nekDumpCount = 0; // classic dumps written by this process
 static int nekChkCount = 0;  // restart checkpoints written by this process
+static bool firstFldDump = true; // first classic dump of this process
+static bool firstChkDump = true; // first restart checkpoint of this process
 static std::string couplingDir; // Coupling_dir, taken from the preciceConfig path
 
 namespace nekrs {
@@ -51,6 +53,8 @@ void reset()
   enforceOutputStep = 0;
   nekDumpCount = 0;
   nekChkCount = 0;
+  firstFldDump = true;
+  firstChkDump = true;
 }
 
 double startTime(void)
@@ -234,14 +238,15 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
   std::string_view data_name, std::string_view data2_name,
   std::string_view direct_data_name, std::string_view direct_data_name_cum,
   double tol_bb, bool *periodic_dir, double * periodic_bounds,
-  int M_VPM, bool staggered) {
+  int M_VPM, bool staggered, bool pre_simulation, int pre_sim_expected_last_step) {
   mesh_t *mesh = nrs->meshV;
   int p_Nfaces = mesh->Nfaces;
   int p_Nfp = mesh->Nfp;
   int p_Np = mesh->Np;
   int p_Nq = mesh->Nq;
   int N_elements = mesh->Nelements;
-
+  nrs->coupling_pre_simulation = pre_simulation;
+  nrs->coupling_pre_sim_expected_last_step = pre_sim_expected_last_step;
   double * nek_x = mesh->x;
   double * nek_y = mesh->y;
   double * nek_z = mesh->z;
@@ -755,7 +760,7 @@ static int resolveCheckpointOffset()
 // from any checkpoint -- not just the last one. Rewritten in full at every checkpoint;
 // rows at or beyond the checkpoint being written describe a future this run has just
 // superseded and are dropped, so the table always matches what is actually on disk.
-static void writeRestartIndex(int checkpoint, int lastDump, double t, int tStep)
+static void writeRestartIndex(int checkpoint, int lastDump, double t, double dt, int tStep)
 {
   std::string casename;
   platform->options.getArgs("CASENAME", casename);
@@ -771,6 +776,7 @@ static void writeRestartIndex(int checkpoint, int lastDump, double t, int tStep)
     int chk;
     int dump;
     double time;
+    double dt;
     int step;
   };
   std::vector<Row> rows;
@@ -778,15 +784,20 @@ static void writeRestartIndex(int checkpoint, int lastDump, double t, int tStep)
   std::ifstream in(path);
   if (in) {
     for (std::string line; std::getline(in, line);) {
-      Row r;
-      if (!line.empty() && line[0] != '#' &&
-          sscanf(line.c_str(), "%d %d %lg %d", &r.chk, &r.dump, &r.time, &r.step) == 4 &&
-          r.chk < checkpoint)
+      if (line.empty() || line[0] == '#')
+        continue;
+
+      Row r{};
+      // a table written before the dt column existed still parses, with dt left at 0
+      const bool ok =
+          sscanf(line.c_str(), "%d %d %lg %lg %d", &r.chk, &r.dump, &r.time, &r.dt, &r.step) == 5 ||
+          sscanf(line.c_str(), "%d %d %lg %d", &r.chk, &r.dump, &r.time, &r.step) == 4;
+      if (ok && r.chk < checkpoint)
         rows.push_back(r);
     }
     in.close();
   }
-  rows.push_back({checkpoint, lastDump, t, tStep});
+  rows.push_back({checkpoint, lastDump, t, dt, tStep});
 
   std::ofstream out(path, std::ios::trunc);
   if (!out) {
@@ -802,14 +813,17 @@ static void writeRestartIndex(int checkpoint, int lastDump, double t, int tStep)
       << "# To continue from a given checkpoint, put in the .par:\n"
       << "#   [GENERAL]  startFrom = " << chkSuffix << casename << "0.f<checkpoint>\n"
       << "#   [CASEDATA] restart = 1 ; startTime = <time> ; writeStepOffset = <lastDump>\n"
+      << "# dt is the step size nekRS was running with at that checkpoint.\n"
       << "#\n";
-  snprintf(buf, sizeof(buf), "# %10s %11s %24s %10s", "checkpoint", "lastDump", "time", "tStep");
+  snprintf(buf, sizeof(buf), "# %10s %11s %24s %24s %10s", "checkpoint", "lastDump", "time", "dt",
+           "tStep");
   out << buf << "\n";
 
   for (const auto &r : rows) {
     char chkStr[16];
     snprintf(chkStr, sizeof(chkStr), "%05d", r.chk);
-    snprintf(buf, sizeof(buf), "  %10s %11d %24.15e %10d", chkStr, r.dump, r.time, r.step);
+    snprintf(buf, sizeof(buf), "  %10s %11d %24.15e %24.15e %10d", chkStr, r.dump, r.time, r.dt,
+             r.step);
     out << buf << "\n";
   }
 }
@@ -819,14 +833,22 @@ void outfld(double time, int step, std::string suffix, int writeStepOffset, bool
   std::string oldValue;
   platform->options.getArgs("CHECKPOINT OUTPUT MESH", oldValue);
 
-  if (firstOutfld)
+  const bool isChk = (suffix == chkSuffix);
+  const std::string tmpPrefix = isChk ? tmpPrefixChk : tmpPrefixFld;
+
+  // Write the mesh into the first file of EACH sequence, not just the first file of the
+  // process. nek5000 has its own "first file carries the mesh" rule, but it is keyed on a
+  // prefx3 that mfo_open_files never resets: chcopy(prefx3,prefix,min(len(prefix),3)) copies
+  // nothing when the prefix is empty, so once a "restart" dump has set prefx3 to "res" the
+  // blank-prefix test `prefx3.eq.'   '.and.nfld.eq.1` can no longer fire. With two sequences
+  // running, whichever one dumps second is then left without coordinates and reads as
+  // garbage geometry in ParaView.
+  bool &firstOfSequence = isChk ? firstChkDump : firstFldDump;
+  if (firstOfSequence)
     platform->options.setArgs("CHECKPOINT OUTPUT MESH", "TRUE");
 
   if (platform->options.compareArgs("MOVING MESH", "TRUE"))
     platform->options.setArgs("CHECKPOINT OUTPUT MESH", "TRUE");
-
-  const bool isChk = (suffix == chkSuffix);
-  const std::string tmpPrefix = isChk ? tmpPrefixChk : tmpPrefixFld;
 
   if (restart && writeStepOffset <= 0 && firstOutfld && platform->comm.mpiRank == 0)
     std::cout << "WARNING: restart = 1 but writeStepOffset = " << writeStepOffset
@@ -852,12 +874,13 @@ void outfld(double time, int step, std::string suffix, int writeStepOffset, bool
       if (shift)
         shiftLastDump(suffix, tmpPrefix, count, off);
       if (isChk)
-        writeRestartIndex(nekChkCount + chkOff, nekDumpCount + fldOff, time, step);
+        writeRestartIndex(nekChkCount + chkOff, nekDumpCount + fldOff, time, nrs->dt[0], step);
     }
   }
 
   lastOutputTime = time;
   firstOutfld = 0;
+  firstOfSequence = false;
 
   platform->options.setArgs("CHECKPOINT OUTPUT MESH", oldValue);
 }
@@ -1139,7 +1162,7 @@ double coupling_dt(double coupling_max_dt, double dt_solver, double tol_floor_dt
 
 bool isCouplingOngoing() {return nrs->coupling->IsCouplingOngoing(); }
 
-void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds, int *M_VPM, bool *staggered, double *time, int *writeStepOffset, bool *restart) {
+void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds, int *M_VPM, bool *staggered, double *time, int *writeStepOffset, bool *restart, bool *pre_simulation, int *pre_sim_expected_last_step) {
   platform->par->extract("casedata", "preciceConfig", *config_file);
   // the restart index lives next to precice-config.xml (Coupling_dir), alongside MURPHY's
   couplingDir = fs::path(*config_file).parent_path().string();
@@ -1158,6 +1181,10 @@ void readCouplingParameters(std::string *config_file, bool *periodic_dir, double
   if (restart[0]) {//if restart s false, dont read the startTime and writeStepOffset, as they are not needed. If restart is true, read them from the par file
     platform->par->extract("casedata", "startTime", time[0]); //for the restart, the user has to set the startTime in the par file to the restart time
     platform->par->extract("casedata", "writeStepOffset", writeStepOffset[0]); //offset for the output step counter
+  }
+  platform->par->extract("casedata", "pre_simulation", pre_simulation[0]);
+  if (pre_simulation[0]) {
+    platform->par->extract("casedata", "pre_sim_expected_last_step", pre_sim_expected_last_step[0]);
   }
 } 
 }//namespace nekrs

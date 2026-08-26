@@ -39,6 +39,8 @@ struct nrs_t {
   dfloat *coupling_cum;
   occa::memory o_coupling_cum;
   occa::memory o_fields1D_cum;
+  bool coupling_pre_simulation;
+  int coupling_pre_sim_expected_last_step;
 
 
   static constexpr double targetTimeBenchmark {0.2};

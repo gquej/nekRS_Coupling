@@ -57,10 +57,10 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
                    std::string_view data_name, std::string_view data2_name,
                    std::string_view direct_data_name, std::string_view direct_data_name_cum,
                    double tol_bb, bool *periodic_dir, double * periodic_bounds,
-                   int M_VPM, bool staggered);
+                   int M_VPM, bool staggered, bool pre_simulation, int pre_sim_expected_last_step);
 void couplingFinalize();
 bool isCouplingOngoing();
-void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds, int *M_VPM, bool *staggered, double *time, int *writeStepOffset, bool *restart);
+void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds, int *M_VPM, bool *staggered, double *time, int *writeStepOffset, bool *restart, bool *pre_simulation, int *pre_sim_expected_last_step);
 }
 
 #endif

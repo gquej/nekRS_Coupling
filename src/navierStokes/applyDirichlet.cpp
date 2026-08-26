@@ -169,7 +169,9 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
                                    nrs->o_coupling_bbox,
                                    nrs->tstep,
                                    sbuf[0], //total NW outer area
-                                   sbuf[1]); // total NW outer flux
+                                   sbuf[1],
+                                   nrs->coupling_pre_simulation, 
+                                   nrs->coupling_pre_sim_expected_last_step); // total NW outer flux
     if (sweep == 0)
       oogs::startFinish(platform->o_mempool.slice0,
                         1 + nrs->NVfields,
