@@ -4,6 +4,8 @@
 #include <system_error>
 #include <functional>
 #include "nrs.hpp"
+#include "pointInterpolation.hpp"
+#include <cmath>
 #include "setup.hpp"
 #include "nekInterfaceAdapter.hpp"
 #include "printHeader.hpp"
@@ -509,7 +511,9 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
 
   nrs->interpolator->setPoints(n_VPM_mesh * np, xp.data(), yp.data(), zp.data());
   nrs->interpolator->find();
-  nrs->coupling_cum = (dfloat *)calloc(nrs->fieldOffset, sizeof(dfloat));
+  // the init loop just below writes n_VPM_mesh * fieldOffset entries; allocating only
+  // fieldOffset overran the heap by 3x on the staggered path
+  nrs->coupling_cum = (dfloat *)calloc(n_VPM_mesh * nrs->fieldOffset, sizeof(dfloat));
   nrs->o_coupling_cum = platform->device.malloc(nrs->fieldOffset * sizeof(dfloat), nrs->coupling_cum);
   for (int i = 0; i < n_VPM_mesh * nrs->fieldOffset; i++) {
     nrs->coupling_cum[i] = 1.0;
@@ -1108,24 +1112,75 @@ void couplingWrite() {
   nrs->o_fields1D_cum.copyTo(cum_eval.data());
   std::vector<double> * direct_data = nrs->coupling->direct_data();
   std::vector<double> * direct_data_cum = nrs->coupling->direct_data_cum();
+  // The direct mesh hands us every MURPHY vertex inside nekRS's *axis-aligned* bounding
+  // box, but the mesh is a curved O-mesh, so many of those points lie outside it. findpts
+  // marks them CODE_NOT_FOUND and interpolator->eval leaves their entry in U_eval/cum_eval
+  // UNDEFINED. Copying that on shipped uninitialised memory to MURPHY every step. Send an
+  // explicit zero instead, cum included, so MURPHY's "no NW data here" test is meaningful.
+  // Same guard nekRS uses throughout src/plugins/lpm.cpp.
+  const auto &fp_code = nrs->interpolator->data().code;
+  long n_unfound = 0;
   if (nrs->coupling->staggered()) {
     for (int i = 0; i < np; i++) {
-      (*direct_data)[3 * i + 0] = U_eval[i + 0 * np];
-      (*direct_data)[3 * i + 1] = U_eval[3 * np + i + 1 * np];
-      (*direct_data)[3 * i + 2] = U_eval[6 * np + i + 2 * np];
-      (*direct_data_cum)[3 * i + 0] = std::round(cum_eval[i + 0 * np]);
-      (*direct_data_cum)[3 * i + 1] = std::round(cum_eval[1 * np + i ]);
-      (*direct_data_cum)[3 * i + 2] = std::round(cum_eval[2 * np + i ]);
-      
+      const bool f0 = (fp_code[0 * np + i] != findpts::CODE_NOT_FOUND);
+      const bool f1 = (fp_code[1 * np + i] != findpts::CODE_NOT_FOUND);
+      const bool f2 = (fp_code[2 * np + i] != findpts::CODE_NOT_FOUND);
+      n_unfound += (!f0) + (!f1) + (!f2);
+      (*direct_data)[3 * i + 0] = f0 ? U_eval[i + 0 * np] : 0.0;
+      (*direct_data)[3 * i + 1] = f1 ? U_eval[3 * np + i + 1 * np] : 0.0;
+      (*direct_data)[3 * i + 2] = f2 ? U_eval[6 * np + i + 2 * np] : 0.0;
+      (*direct_data_cum)[3 * i + 0] = f0 ? std::round(cum_eval[i + 0 * np]) : 0.0;
+      (*direct_data_cum)[3 * i + 1] = f1 ? std::round(cum_eval[1 * np + i ]) : 0.0;
+      (*direct_data_cum)[3 * i + 2] = f2 ? std::round(cum_eval[2 * np + i ]) : 0.0;
     }
   } else {
     for (int i = 0; i < np; i++) {
-      (*direct_data)[3 * i + 0] = U_eval[i + 0 * np];
-      (*direct_data)[3 * i + 1] = U_eval[i + 1 * np];
-      (*direct_data)[3 * i + 2] = U_eval[i + 2 * np];
-      (*direct_data_cum)[3 * i + 0] = std::round(cum_eval[i]);
-      (*direct_data_cum)[3 * i + 1] = std::round(cum_eval[i]);
-      (*direct_data_cum)[3 * i + 2] = std::round(cum_eval[i]);
+      const bool found = (fp_code[i] != findpts::CODE_NOT_FOUND);
+      n_unfound += (!found);
+      const double cval = found ? std::round(cum_eval[i]) : 0.0;
+      (*direct_data)[3 * i + 0] = found ? U_eval[i + 0 * np] : 0.0;
+      (*direct_data)[3 * i + 1] = found ? U_eval[i + 1 * np] : 0.0;
+      (*direct_data)[3 * i + 2] = found ? U_eval[i + 2 * np] : 0.0;
+      (*direct_data_cum)[3 * i + 0] = cval;
+      (*direct_data_cum)[3 * i + 1] = cval;
+      (*direct_data_cum)[3 * i + 2] = cval;
+    }
+  }
+  {
+    // audit what we actually put on the wire, and how many points were unfound
+    long n_bad = 0; double worst = 0.0;
+    for (int i = 0; i < 3 * np; i++) {
+      const double v = (*direct_data)[i], c = (*direct_data_cum)[i];
+      if (!std::isfinite(v) || std::fabs(v) > 1.0e10 || !std::isfinite(c) || std::fabs(c) > 1.0e10) {
+        n_bad++; if (std::fabs(v) > std::fabs(worst)) worst = v;
+      }
+    }
+    long n_tot = (long)(nrs->coupling->staggered() ? 3 : 1) * (long)np;
+    long g_unf = 0, g_tot = 0, g_bad = 0;
+    MPI_Reduce(&n_unfound, &g_unf, 1, MPI_LONG, MPI_SUM, 0, platform->comm.mpiComm);
+    MPI_Reduce(&n_tot,     &g_tot, 1, MPI_LONG, MPI_SUM, 0, platform->comm.mpiComm);
+    MPI_Reduce(&n_bad,     &g_bad, 1, MPI_LONG, MPI_SUM, 0, platform->comm.mpiComm);
+    double lo[3] = {1e30, 1e30, 1e30}, hi[3] = {-1e30, -1e30, -1e30};
+    {
+      const auto *vtx = nrs->coupling->direct_vertices();
+      for (int i = 0; i < np; i++)
+        for (int d = 0; d < 3; d++) {
+          const double q = (*vtx)[3 * i + d];
+          if (q < lo[d]) lo[d] = q;
+          if (q > hi[d]) hi[d] = q;
+        }
+      double glo[3], ghi[3];
+      MPI_Reduce(lo, glo, 3, MPI_DOUBLE, MPI_MIN, 0, platform->comm.mpiComm);
+      MPI_Reduce(hi, ghi, 3, MPI_DOUBLE, MPI_MAX, 0, platform->comm.mpiComm);
+      for (int d = 0; d < 3; d++) { lo[d] = glo[d]; hi[d] = ghi[d]; }
+    }
+    static bool reported = false;
+    if (platform->comm.mpiRank == 0 && !reported) {
+      printf("coupling: vertices nekRS RECEIVED span x[%g,%g] y[%g,%g] z[%g,%g]\n",
+             lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]);
+      printf("coupling: %ld of %ld vertices NOT found by findpts (sent as zero); "
+             "send-buffer bad entries = %ld\n", g_unf, g_tot, g_bad);
+      fflush(stdout); reported = true;
     }
   }
   if (platform->comm.mpiRank == 0) {
