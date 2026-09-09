@@ -371,9 +371,25 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     //--------------------------------------------------------------------------------------------------------//
     //------------------------------------- Finally imposing the value --------------------------------------//
     if (pre_simulation && (tstep != pre_sim_expected_last_step)) { // presimulation where we sue classic dirichlet conditions from VPM //&& tstep < 20
-        UH[idM + 0 * offset] = coupling_data1[3 * id_coupling + 0 ];
-        UH[idM + 1 * offset] = coupling_data1[3 * id_coupling + 1 ];
-        UH[idM + 2 * offset] = coupling_data1[3 * id_coupling + 2 ];
+        // Re-read this boundary node's own coupling index. The id_coupling declared above
+        // is reassigned to coupling_vmap[idM_dec] for the vorticity lookup, idM_dec being
+        // the node one point INSIDE the domain, so reading coupling_data1 through it here
+        // imposed the VPM velocity of the first interior point onto the boundary node.
+        // Invisible on a uniform freestream, wrong as soon as the VPM field has gradients.
+        const dlong id_coupling = coupling_vmap[idM];
+        // Same net-flux correction as the mixed branch below. Velocity is Dirichlet on the
+        // whole non-periodic boundary, so the pressure problem is pure Neumann and only
+        // solvable when the imposed data carries zero net flux. Subtracting the mean normal
+        // flux along the normal leaves the tangential components untouched and makes the
+        // imposed field discretely divergence free over the coupling surface.
+        const dfloat un_corr = NW_flux / NW_area;
+        UH[idM + 0 * offset] = coupling_data1[3 * id_coupling + 0 ] - un_corr * nx;
+        UH[idM + 1 * offset] = coupling_data1[3 * id_coupling + 1 ] - un_corr * ny;
+        UH[idM + 2 * offset] = coupling_data1[3 * id_coupling + 2 ] - un_corr * nz;
+
+        UH[idM + 0 * offset] = 0.2;
+        UH[idM + 1 * offset] = 0.;
+        UH[idM + 2 * offset] = 0.;
     } else {
         const bool impose_LS_value = true;
         if (impose_LS_value) {                 // impose 3 comp of omega in the sense of the least sqaures
