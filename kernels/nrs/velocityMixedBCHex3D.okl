@@ -386,10 +386,6 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
         UH[idM + 0 * offset] = coupling_data1[3 * id_coupling + 0 ] - un_corr * nx;
         UH[idM + 1 * offset] = coupling_data1[3 * id_coupling + 1 ] - un_corr * ny;
         UH[idM + 2 * offset] = coupling_data1[3 * id_coupling + 2 ] - un_corr * nz;
-
-        UH[idM + 0 * offset] = 0.2;
-        UH[idM + 1 * offset] = 0.;
-        UH[idM + 2 * offset] = 0.;
     } else {
         const bool impose_LS_value = true;
         if (impose_LS_value) {                 // impose 3 comp of omega in the sense of the least sqaures
