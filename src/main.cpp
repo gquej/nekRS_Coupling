@@ -591,7 +591,12 @@ int main(int argc, char** argv)
     //----------------------------------------------------------------------------
     //Coupling dt
     double coupling_max_dt = nekrs::couplingMaxTimeStep();
-    dt = nekrs::coupling_dt(coupling_max_dt, dt, tol_floor_dt);
+    // The reference fed to the window fit must not be the previous step's fitted dt when
+    // the dt is constant, otherwise the fit-up compounds window after window. The
+    // isLastStep dt above is a deliberate one-off shortening onto endTime, so keep it.
+    const double dt_ref = (isLastStep && nekrs::endTime() > 0) ? dt
+                                                               : nekrs::couplingReferenceDt(dt);
+    dt = nekrs::coupling_dt(coupling_max_dt, dt_ref, tol_floor_dt);
     //----------------------------------------------------------------------------
 
     nekrs::initStep(time, dt, tStep);

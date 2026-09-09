@@ -1187,16 +1187,58 @@ void couplingWrite() {
     printf("Interpolating nek velocity onto murphy vertices, and writing to preCICE\n");
   }
 
-  nrs->coupling->Write();
+  m_traceStop(couplingTrace(), "cpl.write.interp");
+
+  {
+    m_traceScope(couplingTrace(), "cpl.write.precice");
+    nrs->coupling->Write();
+  }
  }
 
-void couplingAdvance(double dt) { nrs->coupling->Advance(dt); }
+void couplingAdvance(double dt) {
+  // nekRS is the second participant of a serial-explicit scheme: this blocks until MURPHY
+  // has produced the next window's data. preCICE's own waitAndReceiveData / waitAndSendData
+  // events are what split that idle wait from the actual transfer.
+  m_traceScope(couplingTrace(), "cpl.advance");
+  nrs->coupling->Advance(dt);
+}
 
 double couplingMaxTimeStep() { return nrs->coupling->GetMaxTimeStep(); }
+
+// Reference dt handed to coupling_dt() below. With a variable dt, adjustDt() has already
+// produced nrs->dt[0] from the dt that was actually taken last step, and its measured CFL
+// only makes sense against that dt, so the caller's value is passed straight through. With
+// a constant dt, dt(tstep) just returns nrs->dt[0], which coupling_dt() itself wrote the
+// step before: using it as the reference lets every window fit-up compound into the next
+// one, and the dt ratchets away from what the .par asked for. Fall back to the .par value.
+double couplingReferenceDt(double dt_solver) {
+  if (platform->options.compareArgs("VARIABLE DT", "TRUE")) {
+    return dt_solver;
+  }
+  double dt_par = 0.0;
+  platform->options.getArgs("DT", dt_par);
+  return (dt_par > 0.0) ? dt_par : dt_solver;
+}
 
 double coupling_dt(double coupling_max_dt, double dt_solver, double tol_floor_dt) {
   double dt; //final dt decided by the coupling
   double quotient = coupling_max_dt / dt_solver;
+
+  // coupling_max_dt/dt_solver is usually an exact integer mathematically, but in double
+  // precision it lands a hair below one: 0.087/0.001 evaluates to 86.99999999999999.
+  // Flooring the raw ratio then throws away a whole substep and inflates dt by roughly
+  // 1/N, which the tol_floor_dt test accepts because the inflation is under 10%. Snap the
+  // ratio to the nearest integer first when it is within round-off of one. The epsilon is
+  // relative so it scales with the substep count. nearest_quotient > 0 keeps the last
+  // substep of a window, where the remainder is smaller than dt_solver and the nearest
+  // integer is zero, on the existing path: floor 0 -> infinite floored_dt -> ceil 1 ->
+  // dt = coupling_max_dt.
+  const double quotient_eps = 1.e-9;
+  const double nearest_quotient = std::round(quotient);
+  if (nearest_quotient > 0. &&
+      std::fabs(quotient - nearest_quotient) <= quotient_eps * nearest_quotient) {
+    quotient = nearest_quotient;
+  }
 
   double floored_quotient = std::floor(quotient);
   int floored_ratio = (int) floored_quotient;
