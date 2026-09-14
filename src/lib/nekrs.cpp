@@ -1118,13 +1118,34 @@ void couplingWrite() {
   // UNDEFINED. Copying that on shipped uninitialised memory to MURPHY every step. Send an
   // explicit zero instead, cum included, so MURPHY's "no NW data here" test is meaningful.
   // Same guard nekRS uses throughout src/plugins/lpm.cpp.
+  //
+  // CODE_NOT_FOUND alone is not enough: a point OUTSIDE the mesh that still falls inside some
+  // element's (oriented, tolerance-inflated) bounding box comes back as CODE_BORDER, with r
+  // clamped onto that element's face and dist2 > 0. eval then returns the face value, i.e.
+  // cum = 1 and the boundary velocity. On big, strongly curved farfield elements the box pokes
+  // far outside the arc: with horrible_mesh_P7 (airfoil_production) MURPHY got cum = 1 up to
+  // ~7 cells upstream of the leading-edge farfield. A border hit is only a real sample if it
+  // lies on the boundary itself (dist2 ~ 0, e.g. the periodic z faces). The threshold is the
+  // one pointInterpolation_t::find uses for "point on boundary or outside the mesh"
+  // (10 * newton_tol, newton_tol = 5e-13 by default).
   const auto &fp_code = nrs->interpolator->data().code;
+  const auto &fp_dist2 = nrs->interpolator->data().dist2;
+  const double border_dist2_tol = 10 * 5e-13;
+  long n_border_out = 0;
+  const auto isFound = [&](const int k) {
+    if (fp_code[k] == findpts::CODE_NOT_FOUND) return false;
+    if (fp_code[k] == findpts::CODE_BORDER && fp_dist2[k] > border_dist2_tol) {
+      n_border_out++;
+      return false;
+    }
+    return true;
+  };
   long n_unfound = 0;
   if (nrs->coupling->staggered()) {
     for (int i = 0; i < np; i++) {
-      const bool f0 = (fp_code[0 * np + i] != findpts::CODE_NOT_FOUND);
-      const bool f1 = (fp_code[1 * np + i] != findpts::CODE_NOT_FOUND);
-      const bool f2 = (fp_code[2 * np + i] != findpts::CODE_NOT_FOUND);
+      const bool f0 = isFound(0 * np + i);
+      const bool f1 = isFound(1 * np + i);
+      const bool f2 = isFound(2 * np + i);
       n_unfound += (!f0) + (!f1) + (!f2);
       (*direct_data)[3 * i + 0] = f0 ? U_eval[i + 0 * np] : 0.0;
       (*direct_data)[3 * i + 1] = f1 ? U_eval[3 * np + i + 1 * np] : 0.0;
@@ -1135,7 +1156,7 @@ void couplingWrite() {
     }
   } else {
     for (int i = 0; i < np; i++) {
-      const bool found = (fp_code[i] != findpts::CODE_NOT_FOUND);
+      const bool found = isFound(i);
       n_unfound += (!found);
       const double cval = found ? std::round(cum_eval[i]) : 0.0;
       (*direct_data)[3 * i + 0] = found ? U_eval[i + 0 * np] : 0.0;
@@ -1156,8 +1177,9 @@ void couplingWrite() {
       }
     }
     long n_tot = (long)(nrs->coupling->staggered() ? 3 : 1) * (long)np;
-    long g_unf = 0, g_tot = 0, g_bad = 0;
+    long g_unf = 0, g_tot = 0, g_bad = 0, g_bo = 0;
     MPI_Reduce(&n_unfound, &g_unf, 1, MPI_LONG, MPI_SUM, 0, platform->comm.mpiComm);
+    MPI_Reduce(&n_border_out, &g_bo, 1, MPI_LONG, MPI_SUM, 0, platform->comm.mpiComm);
     MPI_Reduce(&n_tot,     &g_tot, 1, MPI_LONG, MPI_SUM, 0, platform->comm.mpiComm);
     MPI_Reduce(&n_bad,     &g_bad, 1, MPI_LONG, MPI_SUM, 0, platform->comm.mpiComm);
     double lo[3] = {1e30, 1e30, 1e30}, hi[3] = {-1e30, -1e30, -1e30};
@@ -1178,8 +1200,9 @@ void couplingWrite() {
     if (platform->comm.mpiRank == 0 && !reported) {
       printf("coupling: vertices nekRS RECEIVED span x[%g,%g] y[%g,%g] z[%g,%g]\n",
              lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]);
-      printf("coupling: %ld of %ld vertices NOT found by findpts (sent as zero); "
-             "send-buffer bad entries = %ld\n", g_unf, g_tot, g_bad);
+      printf("coupling: %ld of %ld vertices outside the nek mesh (sent as zero), of which %ld "
+             "were findpts CODE_BORDER hits off the mesh (dist2 > tol); "
+             "send-buffer bad entries = %ld\n", g_unf, g_tot, g_bo, g_bad);
       fflush(stdout); reported = true;
     }
   }
