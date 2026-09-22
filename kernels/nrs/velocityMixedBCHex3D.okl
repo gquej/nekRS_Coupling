@@ -116,18 +116,28 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     const dfloat t2y = sgeo[sid * p_Nsgeo + p_T2YID];
     const dfloat t2z = sgeo[sid * p_Nsgeo + p_T2ZID];
 
-    //--------------------------------------------------------------------------------------------------------//
-    //----------------------------- Quantities relative to the second node of the SE ------------------------//
+    //retrieve the normal velocity at the boundary points from the vpm value
+    const dlong id_coupling_bnd = coupling_vmap[idM];
+    double un_vpm = coupling_data1[3 * id_coupling_bnd + 0 ] * nx + coupling_data1[3 * id_coupling_bnd + 1 ] * ny + coupling_data1[3 * id_coupling_bnd + 2 ] * nz;
+    un_vpm -= NW_flux / NW_area; //correct the normal velocity by the weighted contribution of this node to the net flux
 
-    const int idx_dec = idx + list_off_second[f][0];  //dec stands for being 1 point inside the domain
-    const int idy_dec = idy + list_off_second[f][1];
-    const int idz_dec = idz + list_off_second[f][2];
+    // Node where the VPM vorticity is imposed: on the boundary point itself (0) where the corrected normal velocity is strictly positive,
+    // on the second point (1) otherwise. ind_w is the index of that node in the normal direction.
+    const int omega_layer = (un_vpm > 0.0) ? 0 : 1;
+    const int ind_w = omega_layer ? list_ind_der[f] : list_ind_unk[f];
+
+    //--------------------------------------------------------------------------------------------------------//
+    //------------------ Quantities relative to the node where omega is imposed (first or second node) ------//
+
+    const int idx_dec = idx + omega_layer * list_off_second[f][0];  //dec stands for being omega_layer points inside the domain (0: the boundary node itself)
+    const int idy_dec = idy + omega_layer * list_off_second[f][1];
+    const int idz_dec = idz + omega_layer * list_off_second[f][2];
 
     const dlong idM_dec = e * p_Np + idz_dec * p_Nq * p_Nq + idy_dec * p_Nq + idx_dec ; 
     const dlong idM_el_dec = idM_dec - e * p_Np ;
     const dlong gid_dec = e * p_Np * p_Nvgeo + idM_el_dec ;
 
-    // Element jacobian values evaluated at the first interor point
+    // Element jacobian values evaluated at the node where omega is imposed
     const dfloat rx = vgeo[gid_dec + p_RXID * p_Np];
     const dfloat sx = vgeo[gid_dec + p_SXID * p_Np];
     const dfloat tx = vgeo[gid_dec + p_TXID * p_Np];
@@ -159,6 +169,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     //            du[0] =    du/dr(1,j,k) - U(0,j,k) D(1,0)  = U(1,j,k) D(1,1) + ..... + U(p,j,k) D(1,p) + .... + U(N-1,j,k) D(1,N-1)
     //
     // Note that the velocity values used in the rhs of the above expression are extrapoled in time (stored in the Nek array "Ue").
+    // With omega_layer == 0, the same holds with row 0 of D instead of row 1: du[0] = du/dr(0,j,k) - U(0,j,k) D(0,0).
     //
     //
     // In the 2nd and 3rd loops, we compute the derivatives in the 2 tangential directions. For instance, for du/ds, we compute 
@@ -177,7 +188,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
         *(ids[(0 + off ) % 3]) = k; // in this loop, the "r" index is replaced by k since we compute the derivative in the r direction
 
         const dlong idM_local = e * p_Np + idz_loc * p_Nq * p_Nq + idy_loc * p_Nq + idx_loc;
-        const dfloat Dr = D[list_ind_der[f] * p_Nq + k];
+        const dfloat Dr = D[ind_w * p_Nq + k];
         double upred,vpred,wpred;
         if(tstep>2){ // extrapolated values are only valid after 2 time steps for BDF2
             upred = Ue[idM_local + 0 * offset];
@@ -201,7 +212,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
         int idz_loc = idz;
         int *ids[3] = {&idx_loc, &idy_loc, &idz_loc};
         int id_der = *(ids[(1 + off) % 3]);
-        *(ids[(0 + off ) % 3]) += off_sec; //we compute the derivative on the first interior point (etiher + 1 or -1)
+        *(ids[(0 + off ) % 3]) += omega_layer * off_sec; //we compute the derivative on the node where omega is imposed (boundary plane, or first interior point: + 1 or -1)
         *(ids[(1 + off ) % 3]) = k;  // in this loop, the "s" index is replaced by k since we compute the derivative in the s direction
 
         const dlong idM_local = e * p_Np + idz_loc * p_Nq * p_Nq + idy_loc * p_Nq + idx_loc;       
@@ -225,7 +236,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
         int idz_loc = idz;
         int *ids[3] = {&idx_loc, &idy_loc, &idz_loc};
         int id_der = *(ids[(2 + off) % 3]);
-        *(ids[(0 + off ) % 3]) += off_sec; //we compute the derivative on the first interior point (etiher + 1 or -1)
+        *(ids[(0 + off ) % 3]) += omega_layer * off_sec; //we compute the derivative on the node where omega is imposed (boundary plane, or first interior point: + 1 or -1)
         *(ids[(2 + off ) % 3]) = k; // in this loop, the "t" index is replaced by k since we compute the derivative in the t direction
 
         const dlong idM_local = e * p_Np + idz_loc * p_Nq * p_Nq + idy_loc * p_Nq + idx_loc;
@@ -244,12 +255,9 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     //--------------------------------------------------------------------------------------------------------//
     //------------------------------------ Solving the 3x3 linear system ------------------------------------//
 
-    //retrieve the normal velocity at the boundary points from the vpm value
-    dlong id_coupling = coupling_vmap[idM];
-    double un_vpm = coupling_data1[3 * id_coupling + 0 ] * nx + coupling_data1[3 * id_coupling + 1 ] * ny + coupling_data1[3 * id_coupling + 2 ] * nz;
-    un_vpm -= NW_flux / NW_area; //correct the normal velocity by the weighted contribution of this node to the net flux
-    //retrieve both tangential vorticity components at the first interior points, from the vpm value
-    id_coupling = coupling_vmap[idM_dec];
+    //(the corrected normal velocity un_vpm is computed above, since it selects the node where omega is imposed)
+    //retrieve the vorticity components at the node where omega is imposed, from the vpm value
+    dlong id_coupling = coupling_vmap[idM_dec];
     const dfloat wn_vpm  = coupling_data2[3 * id_coupling + 0 ] * nx + coupling_data2[3 * id_coupling + 1 ]  * ny + coupling_data2[3 * id_coupling + 2 ]  * nz; //omega_n
     const dfloat wt1_vpm = coupling_data2[3 * id_coupling + 0 ] * t1x + coupling_data2[3 * id_coupling + 1 ] * t1y + coupling_data2[3 * id_coupling + 2 ] * t1z; //omega_t1
     const dfloat wt2_vpm = coupling_data2[3 * id_coupling + 0 ] * t2x + coupling_data2[3 * id_coupling + 1 ] * t2y + coupling_data2[3 * id_coupling + 2 ] * t2z; //omega_t2
@@ -269,7 +277,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     B2 = wt1_vpm - t1x * wx - t1y * wy - t1z * wz;
     B3 = wt2_vpm - t2x * wx - t2y * wy - t2z * wz;
 
-    const dfloat D21 = D[list_ind_der[f] * p_Nq + list_ind_unk[f]]; // weight of the first node in the normal derivative evaluated at the second node (multiplies the unknown)
+    const dfloat D21 = D[ind_w * p_Nq + list_ind_unk[f]]; // weight of the boundary node in the normal derivative evaluated at the node where omega is imposed (multiplies the unknown): D(1,0) or D(0,0)
 
     double jac[3][3] = {{rx, ry, rz}, {sx, sy, sz}, {tx, ty, tz}};   
     M21 = ( t1y * jac[0 + off][2] - t1z * jac[0 + off][1]) * D21;
@@ -291,6 +299,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     // We impose U nx + V ny + W nz = u_n(vpm), and minimize the 2-norm error on the vorticity (3 equations, 2 independent unknows).
     // Depending on whether nx, ny or nz are nonzero (we need to divide by those at some point), we either isolate U, V or W in the normal velocity constraint and replace in the 3 vorticity equations.
     // This yields Ax = b, with A (3 x 2). We then solve x_LS = (A^T A)^(-1) A^T b to minimize ||Ax-b||^2.
+    // With omega_layer == 0, jac[off] is parallel to n, so the omega_n row of A vanishes and x_LS equals the 2-component solution (usol,vsol,wsol).
 
     const dfloat rhs_n = wn_vpm  - nx  * wx  - ny * wy  - nz * wz;
     const dfloat rhs_t = wt1_vpm - t1x * wx - t1y * wy - t1z * wz;
@@ -372,8 +381,8 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
     //------------------------------------- Finally imposing the value --------------------------------------//
     if (pre_simulation && (tstep != pre_sim_expected_last_step)) { // presimulation where we sue classic dirichlet conditions from VPM //&& tstep < 20
         // Re-read this boundary node's own coupling index. The id_coupling declared above
-        // is reassigned to coupling_vmap[idM_dec] for the vorticity lookup, idM_dec being
-        // the node one point INSIDE the domain, so reading coupling_data1 through it here
+        // is coupling_vmap[idM_dec] for the vorticity lookup, idM_dec being the node one
+        // point INSIDE the domain wherever un_vpm <= 0, so reading coupling_data1 through it here
         // imposed the VPM velocity of the first interior point onto the boundary node.
         // Invisible on a uniform freestream, wrong as soon as the VPM field has gradients.
         const dlong id_coupling = coupling_vmap[idM];
