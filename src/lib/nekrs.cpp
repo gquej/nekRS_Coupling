@@ -1217,6 +1217,16 @@ void couplingAdvance(double dt) { nrs->coupling->Advance(dt); }
 
 double couplingMaxTimeStep() { return nrs->coupling->GetMaxTimeStep(); }
 
+// [CASEDATA] restartEveryWindows: write the "restart" checkpoint at every k-th coupling window
+// boundary (default 1 = every window, 0 = never). Not checked against MURPHY: a coupled restart
+// needs a nek and a MURPHY checkpoint of the same window, so pick k as a multiple of MURPHY's
+// --iter-save (one MURPHY iteration per window), or the nek checkpoints have no MURPHY partner.
+int couplingRestartEveryWindows() {
+  int k = 1;
+  platform->par->extract("casedata", "restarteverywindows", k);
+  return k;
+}
+
 // Reference dt handed to coupling_dt() below. With a variable dt, adjustDt() has already
 // produced nrs->dt[0] from the dt that was actually taken last step, and its measured CFL
 // only makes sense against that dt, so the caller's value is passed straight through. With

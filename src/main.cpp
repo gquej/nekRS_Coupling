@@ -566,6 +566,8 @@ int main(int argc, char** argv)
   //------------------------------- Coupling setup -----------------------------------------------
   //----------------------------------------------------------------------------------------------
   
+  const int restartEveryWindows = nekrs::couplingRestartEveryWindows();
+  int nWindowsClosed = 0;
   while (!isLastStep && nekrs::isCouplingOngoing()) {
     MPI_Barrier(comm);
     const double timeStartStep = MPI_Wtime();
@@ -658,8 +660,11 @@ int main(int argc, char** argv)
       // This substep closes the current preCICE time window: dump the restart checkpoint
       // here (and only here) so that checkpoints exist at coupling-window boundaries only,
       // in step with MURPHY's own checkpoint. Set writeInterval < 0 in the .par to disable
-      // the per-substep dump above, otherwise both fire.
-      nekrs::outfld(time, tStep, "restart", writeStepOffset, restart);
+      // the per-substep dump above, otherwise both fire. [CASEDATA] restartEveryWindows = k
+      // keeps only every k-th one (counted from the start of this run), see nekrs.cpp.
+      ++nWindowsClosed;
+      if (restartEveryWindows > 0 && (nWindowsClosed % restartEveryWindows) == 0)
+        nekrs::outfld(time, tStep, "restart", writeStepOffset, restart);
     }
     nekrs::couplingAdvance(dt);
     //----------------------------------------------------------------------------
