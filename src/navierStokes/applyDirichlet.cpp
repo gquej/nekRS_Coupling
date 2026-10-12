@@ -124,7 +124,8 @@ void applyDirichletVelocity(nrs_t *nrs, double time, occa::memory& o_U,occa::mem
                   nrs->o_coupling_data1,
                   nrs->o_coupling_vmap, 
                   mesh->o_vmapM,
-                  mesh->o_EToB,
+                  nrs->o_EToB, // velocity BC types (the kernel tests p_bcTypeV); mesh->o_EToB holds
+                               // boundary IDs, which only matched when the "v" faces had ID 3
                   mesh->o_sgeo,
                   nrs->o_coupling_area,
                   nrs->o_coupling_flux,
