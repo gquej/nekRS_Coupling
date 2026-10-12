@@ -565,6 +565,8 @@ int main(int argc, char** argv)
                       periodic_dir, periodic_bounds, M_VPM, staggered, pre_simulation, pre_sim_expected_last_step);
   // body force dump (forces.dat), see forcesSetup() in nekrs.cpp; time is still the start time here
   nekrs::forcesSetup(time, restart);
+  // CFL / mesh Reynolds dump (dia<case>0.f*), see diagnosticsSetup() in nekrs.cpp
+  nekrs::diagnosticsSetup();
   //------------------------------- Coupling setup -----------------------------------------------
   //----------------------------------------------------------------------------------------------
   
@@ -601,6 +603,8 @@ int main(int argc, char** argv)
     const double dt_ref = (isLastStep && nekrs::endTime() > 0) ? dt
                                                                : nekrs::couplingReferenceDt(dt);
     dt = nekrs::coupling_dt(coupling_max_dt, dt_ref, tol_floor_dt);
+    // goes with the regular dump above: same fields, but the dt this step will actually take
+    if (outputStep) nekrs::diagnosticsDump(time, tStep, dt, writeStepOffset, restart);
     //----------------------------------------------------------------------------
 
     nekrs::initStep(time, dt, tStep);

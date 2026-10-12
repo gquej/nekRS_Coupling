@@ -1,0 +1,83 @@
+// Per-GLL-node CFL and mesh Reynolds numbers for the coupled diagnostics dump (see
+// diagnosticsDump in src/lib/nekrs.cpp):
+//   CFL     = dt * sum_d |u_rel . grad r_d| / dr_d       (cflHex3D.okl, without the element max)
+//   Re_u    = |u| h / nu
+//   Re_omega = |omega| h^2 / nu
+// with dr_d the local GLL spacing in reference direction d (idH = 1 / dr, as in cfl.cpp) and
+// h = max_d dr_d / |grad r_d|, the largest physical distance between adjacent GLL planes at the
+// node. u_rel = U - W on a moving mesh, U otherwise; Re_u uses U itself. nu = mue / rho.
+// Each quantity goes to out[id + slot * offset], or is skipped if its slot is < 0. OIJ is the
+// rotation-rate part (0.5 omega) of strainRotationRate(), read only when slotReW >= 0.
+@kernel void cflMeshReynolds(const dlong Nelements,
+                             const dlong offset,
+                             const dfloat dt,
+                             const int movingMesh,
+                             const int slotCFL,
+                             const int slotReU,
+                             const int slotReW,
+                             @ restrict const dfloat *vgeo,
+                             @ restrict const dfloat *idH,
+                             @ restrict const dfloat *U,
+                             @ restrict const dfloat *W,
+                             @ restrict const dfloat *mue,
+                             @ restrict const dfloat *rho,
+                             @ restrict const dfloat *OIJ,
+                             @ restrict dfloat *out)
+{
+  for (dlong e = 0; e < Nelements; e++; @outer(0)) {
+    for (int k = 0; k < p_Nq; ++k) {
+      for (int j = 0; j < p_Nq; ++j; @inner(1)) {
+        for (int i = 0; i < p_Nq; ++i; @inner(0)) {
+          const dlong id = e * p_Np + k * p_Nq * p_Nq + j * p_Nq + i;
+          const dlong gid = e * p_Np * p_Nvgeo + k * p_Nq * p_Nq + j * p_Nq + i;
+          const dfloat drdx = vgeo[gid + p_RXID * p_Np];
+          const dfloat drdy = vgeo[gid + p_RYID * p_Np];
+          const dfloat drdz = vgeo[gid + p_RZID * p_Np];
+          const dfloat dsdx = vgeo[gid + p_SXID * p_Np];
+          const dfloat dsdy = vgeo[gid + p_SYID * p_Np];
+          const dfloat dsdz = vgeo[gid + p_SZID * p_Np];
+          const dfloat dtdx = vgeo[gid + p_TXID * p_Np];
+          const dfloat dtdy = vgeo[gid + p_TYID * p_Np];
+          const dfloat dtdz = vgeo[gid + p_TZID * p_Np];
+
+          const dfloat un = U[id + 0 * offset];
+          const dfloat vn = U[id + 1 * offset];
+          const dfloat wn = U[id + 2 * offset];
+
+          if (slotCFL >= 0) {
+            dfloat ur = un;
+            dfloat vr = vn;
+            dfloat wr = wn;
+            if (movingMesh) {
+              ur -= W[id + 0 * offset];
+              vr -= W[id + 1 * offset];
+              wr -= W[id + 2 * offset];
+            }
+            const dfloat cr = fabs(ur * drdx + vr * drdy + wr * drdz) * idH[i];
+            const dfloat cs = fabs(ur * dsdx + vr * dsdy + wr * dsdz) * idH[j];
+            const dfloat ct = fabs(ur * dtdx + vr * dtdy + wr * dtdz) * idH[k];
+            out[id + slotCFL * offset] = dt * (cr + cs + ct);
+          }
+
+          if (slotReU >= 0 || slotReW >= 0) {
+            const dfloat hr = 1 / (sqrt(drdx * drdx + drdy * drdy + drdz * drdz) * idH[i]);
+            const dfloat hs = 1 / (sqrt(dsdx * dsdx + dsdy * dsdy + dsdz * dsdz) * idH[j]);
+            const dfloat ht = 1 / (sqrt(dtdx * dtdx + dtdy * dtdy + dtdz * dtdz) * idH[k]);
+            const dfloat h = fmax(hr, fmax(hs, ht));
+            const dfloat nu = mue[id] / rho[id];
+
+            if (slotReU >= 0)
+              out[id + slotReU * offset] = sqrt(un * un + vn * vn + wn * wn) * h / nu;
+
+            if (slotReW >= 0) {
+              const dfloat ox = OIJ[id + 6 * offset];
+              const dfloat oy = OIJ[id + 7 * offset];
+              const dfloat oz = OIJ[id + 8 * offset];
+              out[id + slotReW * offset] = 2 * sqrt(ox * ox + oy * oy + oz * oz) * h * h / nu;
+            }
+          }
+        }
+      }
+    }
+  }
+}

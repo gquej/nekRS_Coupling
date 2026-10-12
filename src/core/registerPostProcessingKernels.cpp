@@ -22,6 +22,11 @@ void registerPostProcessingKernels()
   fileName = oklpath + "/postProcessing/" + kernelName + ".okl";
   platform->kernels.add(kernelName, fileName, kernelInfo);
 
+  // pointwise, no atomics either: the coupled CFL / mesh Reynolds dump uses it
+  kernelName = "cflMeshReynolds";
+  fileName = oklpath + "/postProcessing/" + kernelName + ".okl";
+  platform->kernels.add(kernelName, fileName, kernelInfo);
+
   // gatherPlanarValues and scatterPlanarValues kernels require use of atomics
   if (!platform->device.deviceAtomic)
     return;

@@ -44,6 +44,8 @@ static int nekDumpCount = 0; // classic dumps written by this process
 static int nekChkCount = 0;  // restart checkpoints written by this process
 static bool firstFldDump = true; // first classic dump of this process
 static bool firstChkDump = true; // first restart checkpoint of this process
+static int nekDiaCount = 0;      // diagnostics dumps written by this process
+static bool firstDiaDump = true; // first diagnostics dump of this process
 static std::string couplingDir; // Coupling_dir, taken from the preciceConfig path
 
 namespace nekrs {
@@ -58,6 +60,8 @@ void reset()
   nekChkCount = 0;
   firstFldDump = true;
   firstChkDump = true;
+  nekDiaCount = 0;
+  firstDiaDump = true;
 }
 
 double startTime(void)
@@ -653,10 +657,13 @@ void outputStep(int val) { nrs->isOutputStep = val; }
 // Both sequences are shifted: the classic one (empty suffix -> <case>0.f*) and the restart
 // checkpoints ("restart" suffix -> restart<case>0.f*). nek keys its counters by prefix and
 // i_find_prefix() matches them by substring, so the two temporaries must never be a
-// substring of one another -- keeping them the same length guarantees that.
+// substring of one another -- keeping them the same length guarantees that. The optional
+// diagnostics sequence (diaSuffix, see diagnosticsDump) is shifted the same way, under a
+// third temporary of that same length.
 static constexpr const char *chkSuffix = "restart";
 static constexpr const char *tmpPrefixFld = "tmpfld"; // classic sequence   (empty suffix)
 static constexpr const char *tmpPrefixChk = "tmpchk"; // checkpoint sequence (chkSuffix)
+static constexpr const char *tmpPrefixDia = "tmpdia"; // diagnostics sequence (diaSuffix)
 
 static std::string fldName(const std::string &base, int fid, int n)
 {
@@ -1407,6 +1414,104 @@ void forcesCompute(double time, int tStep, bool windowEnd) {
 void forcesFinalize() {
   if (forcesFile) fclose(forcesFile);
   forcesFile = nullptr;
+}
+
+// CFL / mesh Reynolds dump. Each of
+//   [CASEDATA] dumpCFL     = 0 (default) | 1   local CFL, as nekRS defines it (cflHex3D.okl)
+//   [CASEDATA] dumpReU     = 0 (default) | 1   |u| h / nu
+//   [CASEDATA] dumpReOmega = 0 (default) | 1   |omega| h^2 / nu
+// adds one scalar, in that order, to a separate sequence dia<case>0.f<NNNNN> written at every
+// regular dump with the same number, time and step. nek stores the first scalar as the
+// temperature, so readers show them as temperature, s1, s2 (the mapping is printed at setup). h is the largest physical GLL spacing at
+// the node, nu = mue / rho; see kernels/postProcessing/cflMeshReynolds.okl. The fields are
+// those of the regular dump (start of the step) and dt is the step about to be taken, after
+// the coupling-window fit. On restart = 1 the sequence is shifted by writeStepOffset like the
+// regular one. Re_omega costs one strain/rotation-rate evaluation per dump.
+static constexpr const char *diaSuffix = "dia";
+static int diaSlotCFL = -1, diaSlotReU = -1, diaSlotReW = -1;
+static int diaNfields = 0;
+static occa::memory o_diaIdH, o_diaOut;
+
+void diagnosticsSetup() {
+  int cfl = 0, reU = 0, reW = 0;
+  platform->par->extract("casedata", "dumpcfl", cfl);
+  platform->par->extract("casedata", "dumpreu", reU);
+  platform->par->extract("casedata", "dumpreomega", reW);
+  if (cfl) diaSlotCFL = diaNfields++;
+  if (reU) diaSlotReU = diaNfields++;
+  if (reW) diaSlotReW = diaNfields++;
+  if (!diaNfields) return;
+
+  // inverse local GLL spacing per reference direction, as in cfl.cpp
+  mesh_t *mesh = nrs->meshV;
+  std::vector<dfloat> idH(mesh->Nq);
+  for (int n = 0; n < mesh->Nq; n++) {
+    if (n == 0)
+      idH[n] = mesh->gllz[n + 1] - mesh->gllz[n];
+    else if (n == mesh->N)
+      idH[n] = mesh->gllz[n] - mesh->gllz[n - 1];
+    else
+      idH[n] = 0.5 * (mesh->gllz[n + 1] - mesh->gllz[n - 1]);
+    idH[n] = 1.0 / idH[n];
+  }
+  o_diaIdH = platform->device.malloc(mesh->Nq * sizeof(dfloat), idH.data());
+  o_diaOut = platform->device.malloc(diaNfields * nrs->fieldOffset * sizeof(dfloat));
+
+  // nek stores the first scalar as the temperature, so readers list them under these names
+  if (rank == 0) {
+    const char *name[3] = {"temperature", "s1", "s2"};
+    std::string casename;
+    platform->options.getArgs("CASENAME", casename);
+    printf("diagnostics: %s%s0.f* at every regular dump,", diaSuffix, casename.c_str());
+    if (diaSlotCFL >= 0) printf(" %s = CFL", name[diaSlotCFL]);
+    if (diaSlotReU >= 0) printf(" %s = |u|h/nu", name[diaSlotReU]);
+    if (diaSlotReW >= 0) printf(" %s = |omega|h^2/nu", name[diaSlotReW]);
+    printf("\n");
+  }
+}
+
+void diagnosticsDump(double time, int step, double dt, int writeStepOffset, bool restart) {
+  if (!diaNfields) return;
+
+  mesh_t *mesh = nrs->meshV;
+  const bool movingMesh = platform->options.compareArgs("MOVING MESH", "TRUE");
+
+  auto o_SO = platform->o_mempool.slice0;
+  if (diaSlotReW >= 0) postProcessing::strainRotationRate(nrs, true, true, o_SO);
+
+  platform->kernels.get("cflMeshReynolds")(mesh->Nelements,
+                                           nrs->fieldOffset,
+                                           (dfloat) dt,
+                                           (int) movingMesh,
+                                           diaSlotCFL,
+                                           diaSlotReU,
+                                           diaSlotReW,
+                                           mesh->o_vgeo,
+                                           o_diaIdH,
+                                           nrs->o_U,
+                                           movingMesh ? mesh->o_U : nrs->o_U,
+                                           nrs->o_mue,
+                                           nrs->o_rho,
+                                           (diaSlotReW >= 0) ? o_SO : nrs->o_U,
+                                           o_diaOut);
+
+  // same precision and mesh rule as outfld(): coordinates in the first file of the sequence
+  std::string precision;
+  platform->options.getArgs("CHECKPOINT PRECISION", precision);
+  const int FP64 = (precision == "DP" || precision == "FP64");
+  const int outXYZ = firstDiaDump || movingMesh ||
+                     !platform->options.compareArgs("CHECKPOINT OUTPUT MESH", "FALSE");
+
+  const int off = restart ? writeStepOffset : 0;
+  const bool shift = (off > 0);
+  writeFld(shift ? tmpPrefixDia : diaSuffix, time, step, outXYZ, FP64, &o_diaOut, diaNfields);
+  ++nekDiaCount;
+
+  if (shift) {
+    MPI_Barrier(platform->comm.mpiComm);
+    if (platform->comm.mpiRank == 0) shiftLastDump(diaSuffix, tmpPrefixDia, nekDiaCount, off);
+  }
+  firstDiaDump = false;
 }
 }//namespace nekrs
 

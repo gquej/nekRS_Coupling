@@ -66,6 +66,8 @@ void readCouplingParameters(std::string *config_file, bool *periodic_dir, double
 void forcesSetup(double startTime, bool restart);
 void forcesCompute(double time, int tStep, bool windowEnd);
 void forcesFinalize();
+void diagnosticsSetup();
+void diagnosticsDump(double time, int step, double dt, int writeStepOffset, bool restart);
 }
 
 #endif
