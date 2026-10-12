@@ -396,7 +396,7 @@ if (bcType == p_bcTypeV || bcType == p_bcTypeINT) {
         UH[idM + 1 * offset] = coupling_data1[3 * id_coupling + 1 ] - un_corr * ny;
         UH[idM + 2 * offset] = coupling_data1[3 * id_coupling + 2 ] - un_corr * nz;
     } else {
-        const bool impose_LS_value = true;
+        const bool impose_LS_value = p_imposeLS; // [CASEDATA] imposeLS, see registerNrsKernels.cpp
         if (impose_LS_value) {                 // impose 3 comp of omega in the sense of the least sqaures
             UH[idM + 0 * offset] = U_LS;
             UH[idM + 1 * offset] = V_LS;

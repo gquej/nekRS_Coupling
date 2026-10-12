@@ -176,7 +176,16 @@ void registerNrsKernels(occa::properties kernelInfoBC)
 
     kernelName = "velocityMixedBC" + suffix;
     fileName = oklpath + "/nrs/" + kernelName + ".okl";
-    platform->kernels.add(section + kernelName, fileName, kernelInfoBC);
+    {
+      // [CASEDATA] imposeLS: 1 (default) imposes the 3 vorticity components in the least-squares
+      // sense on the coupling boundary, 0 only the 2 tangential ones. Compile-time switch, so each
+      // value gets its own kernel in the cache.
+      int imposeLS = 1;
+      platform->par->extract("casedata", "imposels", imposeLS);
+      occa::properties mixedBCProps = kernelInfoBC;
+      mixedBCProps["defines/p_imposeLS"] = imposeLS ? 1 : 0;
+      platform->kernels.add(section + kernelName, fileName, mixedBCProps);
+    }
 
     kernelName = "getBCFlux" + suffix;
     fileName = oklpath + "/nrs/" + kernelName + ".okl";
