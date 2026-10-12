@@ -6,6 +6,10 @@
 #if OCCA_DPCPP_ENABLED
 #include <sycl.hpp>
 #else
+// The no-DPCPP stub types below use uint32_t/uint64_t. libc++ happens to pull
+// <cstdint> in transitively via <vector>; libstdc++ (GCC 13) does not, so the
+// include has to be explicit or this file fails to compile on Linux.
+#include <cstdint>
 #include <vector>
 namespace sycl {
 

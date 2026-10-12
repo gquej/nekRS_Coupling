@@ -296,13 +296,44 @@ include(config/nrs.cmake)
 # endif()
 
 # target_link_libraries(nekrs-lib PUBLIC ${PRECICE_LIBRARY})
-set(precice_DIR "/soft/precice/lib/cmake/precice")
+# preCICE and PETSc prefixes come from the environment variables PRECICE_DIR and
+# PETSC_DIR (set by env.sh in Local_Coupling and Lucia_Coupling), and fall back to the
+# Docker image's /soft/precice and /soft/petsc when those are not set, so the same file
+# builds in Docker, on macOS and on Lucia. PRECICE_LIB can override the library dir
+# because Spack installs preCICE into lib64 while most other prefixes use lib; PETSc is
+# looked up in lib and lib64 with any library extension (.so on Linux, .dylib on macOS).
+if(DEFINED ENV{PRECICE_DIR})
+  set(NEKRS_PRECICE_DIR "$ENV{PRECICE_DIR}")
+else()
+  set(NEKRS_PRECICE_DIR "/soft/precice")
+endif()
+if(DEFINED ENV{PETSC_DIR})
+  set(NEKRS_PETSC_DIR "$ENV{PETSC_DIR}")
+else()
+  set(NEKRS_PETSC_DIR "/soft/petsc")
+endif()
+message(STATUS "nekRS coupling: preCICE from ${NEKRS_PRECICE_DIR}, PETSc from ${NEKRS_PETSC_DIR}")
+
+if(DEFINED ENV{PRECICE_LIB})
+  set(NEKRS_PRECICE_LIBDIR "$ENV{PRECICE_LIB}")
+elseif(EXISTS "${NEKRS_PRECICE_DIR}/lib64/cmake/precice")
+  set(NEKRS_PRECICE_LIBDIR "${NEKRS_PRECICE_DIR}/lib64")
+else()
+  set(NEKRS_PRECICE_LIBDIR "${NEKRS_PRECICE_DIR}/lib")
+endif()
+
+set(precice_DIR "${NEKRS_PRECICE_LIBDIR}/cmake/precice")
 find_package(precice REQUIRED CONFIG)
 
 target_link_libraries(nekrs-lib PUBLIC precice::precice)
-target_include_directories(nekrs-lib PUBLIC /soft/precice/include)
+target_include_directories(nekrs-lib PUBLIC ${NEKRS_PRECICE_DIR}/include)
 
-target_link_libraries(nekrs-lib PUBLIC /soft/petsc/lib/libpetsc.so)
+find_library(NEKRS_PETSC_LIBRARY NAMES petsc
+             PATHS "${NEKRS_PETSC_DIR}/lib" "${NEKRS_PETSC_DIR}/lib64" NO_DEFAULT_PATH)
+if(NOT NEKRS_PETSC_LIBRARY)
+  message(FATAL_ERROR "libpetsc not found under ${NEKRS_PETSC_DIR} (set PETSC_DIR)")
+endif()
+target_link_libraries(nekrs-lib PUBLIC ${NEKRS_PETSC_LIBRARY})
 
 
 # Link dependencies 
