@@ -1210,21 +1210,10 @@ void couplingWrite() {
     printf("Interpolating nek velocity onto murphy vertices, and writing to preCICE\n");
   }
 
-  m_traceStop(couplingTrace(), "cpl.write.interp");
-
-  {
-    m_traceScope(couplingTrace(), "cpl.write.precice");
-    nrs->coupling->Write();
-  }
+  nrs->coupling->Write();
  }
 
-void couplingAdvance(double dt) {
-  // nekRS is the second participant of a serial-explicit scheme: this blocks until MURPHY
-  // has produced the next window's data. preCICE's own waitAndReceiveData / waitAndSendData
-  // events are what split that idle wait from the actual transfer.
-  m_traceScope(couplingTrace(), "cpl.advance");
-  nrs->coupling->Advance(dt);
-}
+void couplingAdvance(double dt) { nrs->coupling->Advance(dt); }
 
 double couplingMaxTimeStep() { return nrs->coupling->GetMaxTimeStep(); }
 
