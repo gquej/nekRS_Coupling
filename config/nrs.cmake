@@ -68,7 +68,7 @@ set(SRC
     src/nekInterface/nekInterfaceAdapter.cpp
     src/postProcessing/planarAvg.cpp
     src/postProcessing/strainRotationRate.cpp
-    src/postProcessing/viscousDrag.cpp
+    src/postProcessing/aeroForces.cpp
     src/postProcessing/Qcriterion.cpp
     src/core/registerCvodeKernels.cpp
     src/solvers/cvode/cvode.cpp

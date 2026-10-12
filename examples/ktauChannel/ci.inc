@@ -62,7 +62,7 @@ void ciTestErrors(nrs_t *nrs, dfloat time, int tstep)
   occa::memory &o_Sij = platform->o_mempool.slice0;
   postProcessing::strainRate(nrs, true, o_Sij);
 
-  const auto drag = postProcessing::viscousDrag(nrs, bidWall.size(), o_bidWall, o_Sij);
+  const auto drag = std::abs(postProcessing::aeroForces(nrs, bidWall.size(), o_bidWall, o_Sij).viscous()[0]);
 
   platform->linAlg->fill(mesh->Nlocal, 1.0, platform->o_mempool.slice0);
   const auto areaWall =

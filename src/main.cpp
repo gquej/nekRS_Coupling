@@ -563,6 +563,8 @@ int main(int argc, char** argv)
                       direct_mesh_name, data_name, data2_name,
                       direct_data_name, direct_data_name_cum, tol_bb,
                       periodic_dir, periodic_bounds, M_VPM, staggered, pre_simulation, pre_sim_expected_last_step);
+  // body force dump (forces.dat), see forcesSetup() in nekrs.cpp; time is still the start time here
+  nekrs::forcesSetup(time, restart);
   //------------------------------- Coupling setup -----------------------------------------------
   //----------------------------------------------------------------------------------------------
   
@@ -614,6 +616,10 @@ int main(int argc, char** argv)
  
     time = nekrs::finishStep();
 
+    // this substep closes the current preCICE time window
+    const bool windowEnd = abs(dt - coupling_max_dt) < final_step_tol;
+    nekrs::forcesCompute(time, tStep, windowEnd);
+
     
 
     if(nekrs::updateFileCheckFreq()) {
@@ -655,7 +661,7 @@ int main(int argc, char** argv)
 
     //----------------------------------------------------------------------------
     //Coupling write
-    if (abs(dt - coupling_max_dt) < final_step_tol) {
+    if (windowEnd) {
       nekrs::couplingWrite();
       // This substep closes the current preCICE time window: dump the restart checkpoint
       // here (and only here) so that checkpoints exist at coupling-window boundaries only,
@@ -676,6 +682,7 @@ int main(int argc, char** argv)
 
   //finalize coupling
   nekrs::couplingFinalize();
+  nekrs::forcesFinalize();
 
 
   const int exitValue = nekrs::finalize();

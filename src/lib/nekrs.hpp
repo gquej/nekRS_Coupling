@@ -63,6 +63,9 @@ void couplingSetup(std::string_view config_file,std::string_view solver_name,
 void couplingFinalize();
 bool isCouplingOngoing();
 void readCouplingParameters(std::string *config_file, bool *periodic_dir, double * periodic_bounds, int *M_VPM, bool *staggered, double *time, int *writeStepOffset, bool *restart, bool *pre_simulation, int *pre_sim_expected_last_step);
+void forcesSetup(double startTime, bool restart);
+void forcesCompute(double time, int tStep, bool windowEnd);
+void forcesFinalize();
 }
 
 #endif

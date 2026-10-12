@@ -22,6 +22,7 @@
 #include "AMGX.hpp"
 #include "hypreWrapper.hpp"
 #include "hypreWrapperDevice.hpp"
+#include "postProcessing.hpp"
 
 namespace fs = std::filesystem;
 
@@ -1305,7 +1306,108 @@ void readCouplingParameters(std::string *config_file, bool *periodic_dir, double
   if (pre_simulation[0]) {
     platform->par->extract("casedata", "pre_sim_expected_last_step", pre_sim_expected_last_step[0]);
   }
-} 
+}
+
+// Body force dump. [CASEDATA] computeForces = 1 (default) / 0 integrates the force of the fluid
+// on every face whose velocity BC is a wall (postProcessing::aeroForces) and rank 0 appends
+// "iter time fx fy fz fpx fpy fpz fvx fvy fvz" (total, pressure, viscous; nek mesh frame) to
+// forcesFileName in the run directory. computeForces costs one strain-rate evaluation over the
+// whole mesh per call, so [CASEDATA] forcesAtWindowEnd = 1 restricts it to the nek step that
+// closes each coupling window (default 0 = every nek step).
+// Without restart the file is started afresh. With [CASEDATA] restart = 1 the existing file is
+// cut back to its lines with time <= startTime, which drops whatever a previous run wrote after
+// the checkpoint it restarts from, and appended to; iter then continues from the last kept iter
+// (tStep restarts at 1 in every run).
+static const char *forcesFileName = "forces.dat";
+static bool forcesOn = false;
+static bool forcesAtWindowEnd = false;
+static int forcesNbID = 0;
+static occa::memory o_forcesBID;
+static long long forcesIterOffset = 0;
+static FILE *forcesFile = nullptr;
+
+void forcesSetup(double startTime, bool restart) {
+  int on = 1;
+  platform->par->extract("casedata", "computeforces", on);
+  int windowEnd = 0;
+  platform->par->extract("casedata", "forcesatwindowend", windowEnd);
+  forcesOn = (on != 0);
+  forcesAtWindowEnd = (windowEnd != 0);
+  if (!forcesOn) return;
+
+  std::vector<int> wallIDs;
+  for (int bid = 1; bid <= bcMap::size("velocity"); bid++) {
+    if (bcMap::id(bid, "velocity") == bcMap::bcTypeW) wallIDs.push_back(bid);
+  }
+  if (wallIDs.empty()) {
+    if (rank == 0) printf("forces: no wall boundary, computeForces ignored\n");
+    forcesOn = false;
+    return;
+  }
+  forcesNbID = wallIDs.size();
+  o_forcesBID = platform->device.malloc(wallIDs.size() * sizeof(int), wallIDs.data());
+
+  if (rank == 0) {
+    std::vector<std::string> kept;
+    if (restart && fs::exists(forcesFileName)) {
+      const double tol = 1.e-9 * std::max(1.0, std::fabs(startTime));
+      std::ifstream in(forcesFileName);
+      std::string line;
+      while (std::getline(in, line)) {
+        if (line.empty()) continue;
+        if (line[0] != '#') {
+          long long iter;
+          double t;
+          if (sscanf(line.c_str(), "%lld %lf", &iter, &t) != 2 || t > startTime + tol) continue;
+          forcesIterOffset = iter;
+        }
+        kept.push_back(line);
+      }
+    }
+    if (restart && kept.empty())
+      printf("forces: restart but no %s to append to, starting a new one\n", forcesFileName);
+
+    forcesFile = fopen(forcesFileName, "w");
+    if (!forcesFile) {
+      printf("forces: cannot open %s, forces are computed but not written\n", forcesFileName);
+    } else {
+      if (kept.empty()) {
+        fprintf(forcesFile, "# force of the fluid on the wall boundaries, nek mesh frame; f = fp + fv\n");
+        fprintf(forcesFile, "# iter time fx fy fz fpx fpy fpz fvx fvy fvz\n");
+      }
+      for (const auto &l : kept) fprintf(forcesFile, "%s\n", l.c_str());
+      fflush(forcesFile);
+    }
+
+    printf("forces: wall boundary IDs");
+    for (int bid : wallIDs) printf(" %d", bid);
+    printf(", %s, -> %s", forcesAtWindowEnd ? "at coupling-window ends" : "every nek step", forcesFileName);
+    if (restart) printf(" (kept up to t = %g, iter continues from %lld)", startTime, forcesIterOffset);
+    printf("\n");
+  }
+}
+
+void forcesCompute(double time, int tStep, bool windowEnd) {
+  if (!forcesOn || (forcesAtWindowEnd && !windowEnd)) return;
+
+  auto o_Sij = platform->o_mempool.slice0;
+  postProcessing::strainRate(nrs, true, o_Sij);
+  const auto af = postProcessing::aeroForces(nrs, forcesNbID, o_forcesBID, o_Sij);
+
+  if (forcesFile) {
+    const auto f = af.total();
+    const auto fp = af.pressure();
+    const auto fv = af.viscous();
+    fprintf(forcesFile, "%lld %.16e %.16e %.16e %.16e %.16e %.16e %.16e %.16e %.16e %.16e\n",
+            forcesIterOffset + tStep, time, f[0], f[1], f[2], fp[0], fp[1], fp[2], fv[0], fv[1], fv[2]);
+    fflush(forcesFile);
+  }
+}
+
+void forcesFinalize() {
+  if (forcesFile) fclose(forcesFile);
+  forcesFile = nullptr;
+}
 }//namespace nekrs
 
 int nrsFinalize(nrs_t *nrs)

@@ -5,10 +5,6 @@
 #include "postProcessing.hpp"
 void registerPostProcessingKernels()
 {
-  // gatherPlanarValues and scatterPlanarValues kernels require use of atomics
-  if (!platform->device.deviceAtomic)
-    return;
-
   int N;
   platform->options.getArgs("POLYNOMIAL DEGREE", N);
   const int Nq = N + 1;
@@ -21,9 +17,14 @@ void registerPostProcessingKernels()
   const std::string oklpath = getenv("NEKRS_KERNEL_DIR");
   std::string kernelName, fileName;
 
-  kernelName = "drag";
+  // no atomics needed: registered ahead of the guard below, the coupled force dump uses it
+  kernelName = "aeroForces";
   fileName = oklpath + "/postProcessing/" + kernelName + ".okl";
   platform->kernels.add(kernelName, fileName, kernelInfo);
+
+  // gatherPlanarValues and scatterPlanarValues kernels require use of atomics
+  if (!platform->device.deviceAtomic)
+    return;
 
   kernelName = "Qcriterion";
   fileName = oklpath + "/postProcessing/" + kernelName + ".okl";
